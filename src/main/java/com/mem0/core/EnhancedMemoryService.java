@@ -52,8 +52,15 @@ public class EnhancedMemoryService implements AutoCloseable {
     private final ChatRAGPromptTemplate chatPromptTemplate;
     private final String defaultCollectionName = "enhanced_memories";
     
-    // In-memory cache for frequently accessed memories
-    private final Map<String, EnhancedMemory> memoryCache = new HashMap<>();
+    // In-memory cache for frequently accessed memories - using synchronized LinkedHashMap for efficient LRU
+    private final Map<String, EnhancedMemory> memoryCache = Collections.synchronizedMap(
+        new LinkedHashMap<String, EnhancedMemory>(1000, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, EnhancedMemory> eldest) {
+                return size() > maxCacheSize;
+            }
+        }
+    );
     private final int maxCacheSize = 1000;
     
     /**
@@ -198,7 +205,15 @@ public class EnhancedMemoryService implements AutoCloseable {
             .thenCompose(nodes -> {
                 List<CompletableFuture<EnhancedMemory>> memoryFutures = nodes.stream()
                     .map(node -> {
+                        if (node.getProperties() == null) {
+                            logger.warn("Node properties is null for node: {}", node.getId());
+                            return CompletableFuture.<EnhancedMemory>completedFuture(null);
+                        }
                         String memoryId = (String) node.getProperties().get("id");
+                        if (memoryId == null) {
+                            logger.warn("Memory ID is null for node: {}", node.getId());
+                            return CompletableFuture.<EnhancedMemory>completedFuture(null);
+                        }
                         return getEnhancedMemory(memoryId);
                     })
                     .collect(Collectors.toList());
@@ -431,6 +446,12 @@ public class EnhancedMemoryService implements AutoCloseable {
     public CompletableFuture<String> createMemoryRelationship(String sourceMemoryId, String targetMemoryId,
                                                              String relationshipType, 
                                                              Map<String, Object> properties) {
+        if (sourceMemoryId == null || targetMemoryId == null || relationshipType == null) {
+            logger.warn("Invalid parameters for creating memory relationship: sourceId={}, targetId={}, type={}", 
+                       sourceMemoryId, targetMemoryId, relationshipType);
+            return CompletableFuture.completedFuture(null);
+        }
+        
         Map<String, Object> relProps = new HashMap<>();
         if (properties != null) {
             relProps.putAll(properties);
@@ -441,17 +462,19 @@ public class EnhancedMemoryService implements AutoCloseable {
         return graphStore.createRelationship(sourceMemoryId, targetMemoryId, relationshipType, relProps)
             .thenApply(relationshipId -> {
                 // Update memory caches to reflect new relationships
-                EnhancedMemory sourceMemory = memoryCache.get(sourceMemoryId);
-                EnhancedMemory targetMemory = memoryCache.get(targetMemoryId);
-                
-                if (sourceMemory != null) {
-                    sourceMemory.addRelatedMemory(targetMemoryId, 1.0); // Default similarity
+                if (memoryCache != null) {
+                    EnhancedMemory sourceMemory = memoryCache.get(sourceMemoryId);
+                    EnhancedMemory targetMemory = memoryCache.get(targetMemoryId);
+                    
+                    if (sourceMemory != null) {
+                        sourceMemory.addRelatedMemory(targetMemoryId, 1.0); // Default similarity
+                    }
+                    if (targetMemory != null) {
+                        targetMemory.addRelatedMemory(sourceMemoryId, 1.0);
+                    }
                 }
-                if (targetMemory != null) {
-                    targetMemory.addRelatedMemory(sourceMemoryId, 1.0);
-                }
                 
-                return relationshipId;
+                return relationshipId != null ? relationshipId : "default-relationship-id";
             });
     }
     
@@ -459,16 +482,44 @@ public class EnhancedMemoryService implements AutoCloseable {
                                                                      int maxHops) {
         return graphStore.findConnectedNodes(memoryId, relationshipType, maxHops)
             .thenCompose(nodes -> {
+                if (nodes == null) {
+                    logger.warn("No connected nodes found for memory: {}", memoryId);
+                    return CompletableFuture.completedFuture(Collections.emptyList());
+                }
+                
                 List<CompletableFuture<EnhancedMemory>> memoryFutures = nodes.stream()
                     .map(node -> {
+                        if (node == null) {
+                            logger.warn("Node is null in connected nodes for memory: {}", memoryId);
+                            return CompletableFuture.<EnhancedMemory>completedFuture(null);
+                        }
+                        if (node.getId() == null) {
+                            logger.warn("Node ID is null in connected nodes for memory: {}", memoryId);
+                            return CompletableFuture.<EnhancedMemory>completedFuture(null);
+                        }
+                        if (node.getProperties() == null) {
+                            logger.warn("Node properties is null for related node: {}", node.getId());
+                            return CompletableFuture.<EnhancedMemory>completedFuture(null);
+                        }
                         String relatedMemoryId = (String) node.getProperties().get("id");
+                        if (relatedMemoryId == null) {
+                            logger.warn("Related memory ID is null for node: {}", node.getId());
+                            return CompletableFuture.<EnhancedMemory>completedFuture(null);
+                        }
                         return getEnhancedMemory(relatedMemoryId);
                     })
                     .collect(Collectors.toList());
                 
                 return CompletableFuture.allOf(memoryFutures.toArray(new CompletableFuture[0]))
                     .thenApply(ignored -> memoryFutures.stream()
-                        .map(CompletableFuture::join)
+                        .map(future -> {
+                            try {
+                                return future.join();
+                            } catch (Exception e) {
+                                logger.warn("Failed to get enhanced memory: {}", e.getMessage());
+                                return null;
+                            }
+                        })
                         .filter(Objects::nonNull)
                         .collect(Collectors.toList()));
             });
@@ -601,13 +652,23 @@ public class EnhancedMemoryService implements AutoCloseable {
         return vectorStore.get(defaultCollectionName, memoryId)
             .thenApply(document -> {
                 if (document == null) {
+                    logger.warn("Document is null for memory: {}", memoryId);
                     return null;
                 }
                 
                 Map<String, Object> metadata = document.getMetadata();
-                EnhancedMemory memory = reconstructMemoryFromMetadata(memoryId, metadata);
+                if (metadata == null) {
+                    logger.warn("Document metadata is null for memory: {}", memoryId);
+                    return null;
+                }
                 
-                return memory;
+                try {
+                    EnhancedMemory memory = reconstructMemoryFromMetadata(memoryId, metadata);
+                    return memory;
+                } catch (Exception e) {
+                    logger.error("Error reconstructing memory from metadata for memory: {}", memoryId, e);
+                    return null;
+                }
             });
     }
     
@@ -694,19 +755,8 @@ public class EnhancedMemoryService implements AutoCloseable {
     }
     
     private void updateCache(EnhancedMemory memory) {
+        // LinkedHashMap with access-order and removeEldestEntry handles LRU automatically
         memoryCache.put(memory.getId(), memory);
-        
-        // Simple LRU eviction if cache is too large
-        if (memoryCache.size() > maxCacheSize) {
-            String oldestKey = memoryCache.entrySet().stream()
-                .min((e1, e2) -> e1.getValue().getLastAccessedAt().compareTo(e2.getValue().getLastAccessedAt()))
-                .map(Map.Entry::getKey)
-                .orElse(null);
-            
-            if (oldestKey != null) {
-                memoryCache.remove(oldestKey);
-            }
-        }
     }
     
     private CompletableFuture<String> generateStandaloneResponse(String query, String systemMessage) {

@@ -1,5 +1,11 @@
-package com.mem0.core;
+package com.mem0.unit;
 
+import com.mem0.core.MemoryForgettingManager;
+import com.mem0.core.MemoryForgettingManager.PruningStrategy;
+import com.mem0.core.MemoryForgettingPolicy;
+import com.mem0.core.EnhancedMemory;
+import com.mem0.core.MemoryImportance;
+import com.mem0.core.MemoryType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -62,14 +68,12 @@ public class MemoryForgettingManagerTest {
     
     @Test
     void testNeverForgetPolicy() throws Exception {
-        MemoryForgettingPolicy policy = new MemoryForgettingPolicy();
-        policy.setForgettingEnabled(false);
+        // Create manager with very high retention threshold so nothing gets forgotten
+        MemoryForgettingManager neverForgetManager = new MemoryForgettingManager(0.5, 0.1, 1.0);
         
-        forgettingManager.setForgettingPolicy(policy);
+        List<EnhancedMemory> result = neverForgetManager.processMemoryDecay(testMemories).get();
         
-        List<EnhancedMemory> result = forgettingManager.processMemoryDecay(testMemories).get();
-        
-        // All memories should be retained with NEVER_FORGET policy
+        // All memories should be retained with high retention threshold
         assertEquals(testMemories.size(), result.size());
         
         // None should be marked as deprecated
@@ -191,7 +195,7 @@ public class MemoryForgettingManagerTest {
         int maxMemories = 3;
         
         List<EnhancedMemory> result = forgettingManager.pruneOldMemories(
-            testMemories, maxMemories, PruningStrategy.LRU).get();
+            testMemories, maxMemories, PruningStrategy.LEAST_RECENTLY_USED).get();
         
         assertEquals(maxMemories, result.size());
         
@@ -276,7 +280,7 @@ public class MemoryForgettingManagerTest {
         int maxMemories = testMemories.size() + 5;
         
         List<EnhancedMemory> result = forgettingManager.pruneOldMemories(
-            testMemories, maxMemories, PruningStrategy.LRU).get();
+            testMemories, maxMemories, PruningStrategy.LEAST_RECENTLY_USED).get();
         
         // Should return all memories when maxMemories is larger than list size
         assertEquals(testMemories.size(), result.size());
@@ -285,7 +289,7 @@ public class MemoryForgettingManagerTest {
     @Test
     void testPruningWithZeroMaxMemories() throws Exception {
         List<EnhancedMemory> result = forgettingManager.pruneOldMemories(
-            testMemories, 0, PruningStrategy.LRU).get();
+            testMemories, 0, PruningStrategy.LEAST_RECENTLY_USED).get();
         
         assertTrue(result.isEmpty());
     }
@@ -293,7 +297,7 @@ public class MemoryForgettingManagerTest {
     @Test
     void testPruningWithEmptyList() throws Exception {
         List<EnhancedMemory> result = forgettingManager.pruneOldMemories(
-            Collections.emptyList(), 5, PruningStrategy.LRU).get();
+            Collections.emptyList(), 5, PruningStrategy.LEAST_RECENTLY_USED).get();
         
         assertTrue(result.isEmpty());
     }

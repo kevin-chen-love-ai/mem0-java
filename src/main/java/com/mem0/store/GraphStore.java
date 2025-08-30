@@ -1,5 +1,7 @@
 package com.mem0.store;
 
+import com.mem0.core.EnhancedMemory;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -30,6 +32,23 @@ public interface GraphStore {
     
     CompletableFuture<List<Map<String, Object>>> executeQuery(String cypher, Map<String, Object> parameters);
     
+    // Memory-specific methods
+    CompletableFuture<Void> addMemory(EnhancedMemory memory);
+    
+    CompletableFuture<EnhancedMemory> getMemory(String memoryId);
+    
+    CompletableFuture<Void> updateMemory(EnhancedMemory memory);
+    
+    CompletableFuture<Void> deleteMemory(String memoryId);
+    
+    CompletableFuture<List<EnhancedMemory>> getUserMemories(String userId);
+    
+    CompletableFuture<List<EnhancedMemory>> getMemoryHistory(String userId);
+    
+    CompletableFuture<List<EnhancedMemory>> searchMemories(String query, String userId, int limit);
+    
+    CompletableFuture<Void> addRelationship(String fromMemoryId, String toMemoryId, String relationshipType, Map<String, Object> properties);
+    
     CompletableFuture<Void> close();
     
     static class GraphNode {
@@ -40,7 +59,7 @@ public interface GraphStore {
         public GraphNode(String id, List<String> labels, Map<String, Object> properties) {
             this.id = id;
             this.labels = labels;
-            this.properties = properties;
+            this.properties = properties != null ? properties : new HashMap<>();
         }
         
         public String getId() { return id; }

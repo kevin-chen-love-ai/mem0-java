@@ -272,6 +272,10 @@ public class MemoryService {
                 return nodes.stream()
                     .map(node -> {
                         Map<String, Object> properties = node.getProperties();
+                        if (properties == null) {
+                            logger.warn("Node properties is null for related node: {}", node.getId());
+                            return null;
+                        }
                         return new Memory(
                             (String) properties.get("id"),
                             (String) properties.get("content"),
@@ -281,6 +285,7 @@ public class MemoryService {
                             properties
                         );
                     })
+                    .filter(Objects::nonNull)
                     .collect(Collectors.toList());
             });
     }

@@ -451,6 +451,10 @@ public class MemoryClassifier {
         
         return llmProvider.generateChatCompletion(messages, config)
             .thenApply(response -> {
+                if (response == null || response.getContent() == null) {
+                    logger.warn("LLM response is null, falling back to rules");
+                    return classifyWithRules(content, context);
+                }
                 String classification = response.getContent().toLowerCase().trim();
                 MemoryType type = MemoryType.fromValue(classification);
                 logger.debug("LLM classified '{}' as {}", 
@@ -493,6 +497,10 @@ public class MemoryClassifier {
         
         return llmProvider.generateChatCompletion(messages, config)
             .thenApply(response -> {
+                if (response == null || response.getContent() == null) {
+                    logger.warn("LLM response is null, falling back to rules");
+                    return assessImportanceWithRules(content, type, context);
+                }
                 try {
                     int score = Integer.parseInt(response.getContent().trim());
                     return MemoryImportance.fromScore(score);
@@ -533,6 +541,10 @@ public class MemoryClassifier {
         
         return llmProvider.generateChatCompletion(messages, config)
             .thenApply(response -> {
+                if (response == null || response.getContent() == null) {
+                    logger.warn("LLM response is null, falling back to rules");
+                    return extractEntitiesWithRules(content);
+                }
                 Set<String> entities = new HashSet<>();
                 String[] parts = response.getContent().split(",");
                 for (String part : parts) {

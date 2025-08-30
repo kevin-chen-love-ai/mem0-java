@@ -134,6 +134,14 @@ public class MockEmbeddingProvider implements EmbeddingProvider {
         return true;
     }
     
+    /**
+     * Get the model name used by this embedding provider
+     * @return the model name
+     */
+    public String getModelName() {
+        return "mock-embedding-model";
+    }
+    
     @Override
     public void close() {
         logger.info("Mock嵌入提供者已关闭");

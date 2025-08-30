@@ -116,6 +116,47 @@ public class Mem0CoreTest {
                 }
                 return java.util.concurrent.CompletableFuture.completedFuture(null);
             }
+            
+            // Memory-specific methods
+            @Override
+            public java.util.concurrent.CompletableFuture<Void> addMemory(com.mem0.core.EnhancedMemory memory) {
+                return java.util.concurrent.CompletableFuture.completedFuture(null);
+            }
+            
+            @Override
+            public java.util.concurrent.CompletableFuture<com.mem0.core.EnhancedMemory> getMemory(String memoryId) {
+                return java.util.concurrent.CompletableFuture.completedFuture(null);
+            }
+            
+            @Override
+            public java.util.concurrent.CompletableFuture<Void> updateMemory(com.mem0.core.EnhancedMemory memory) {
+                return java.util.concurrent.CompletableFuture.completedFuture(null);
+            }
+            
+            @Override
+            public java.util.concurrent.CompletableFuture<Void> deleteMemory(String memoryId) {
+                return java.util.concurrent.CompletableFuture.completedFuture(null);
+            }
+            
+            @Override
+            public java.util.concurrent.CompletableFuture<java.util.List<com.mem0.core.EnhancedMemory>> getUserMemories(String userId) {
+                return java.util.concurrent.CompletableFuture.completedFuture(new java.util.ArrayList<>());
+            }
+            
+            @Override
+            public java.util.concurrent.CompletableFuture<java.util.List<com.mem0.core.EnhancedMemory>> getMemoryHistory(String userId) {
+                return java.util.concurrent.CompletableFuture.completedFuture(new java.util.ArrayList<>());
+            }
+            
+            @Override
+            public java.util.concurrent.CompletableFuture<java.util.List<com.mem0.core.EnhancedMemory>> searchMemories(String query, String userId, int limit) {
+                return java.util.concurrent.CompletableFuture.completedFuture(new java.util.ArrayList<>());
+            }
+            
+            @Override
+            public java.util.concurrent.CompletableFuture<Void> addRelationship(String fromMemoryId, String toMemoryId, String relationshipType, java.util.Map<String, Object> properties) {
+                return java.util.concurrent.CompletableFuture.completedFuture(null);
+            }
         };
         llmProvider = new RuleBasedLLMProvider();
         

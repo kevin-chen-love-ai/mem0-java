@@ -1,11 +1,13 @@
-package com.mem0.core;
+package com.mem0.unit;
 
 import com.mem0.config.Mem0Config;
+import com.mem0.core.MemoryService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -158,11 +160,10 @@ public class MemoryServiceTest {
         
         try {
             String content = "Important project deadline on Friday";
-            Map<String, Object> metadata = Map.of(
-                "category", "work",
-                "priority", "high",
-                "deadline", "2024-01-05"
-            );
+            Map<String, Object> metadata = new HashMap<>();
+            metadata.put("category", "work");
+            metadata.put("priority", "high");
+            metadata.put("deadline", "2024-01-05");
             
             String memoryId = memoryService.addMemory(content, testUserId, "reminder", metadata)
                 .get(5, TimeUnit.SECONDS);
@@ -217,13 +218,15 @@ public class MemoryServiceTest {
     @Test
     void testMemoryToString() {
         // Test the Memory class toString method (doesn't require infrastructure)
+        Map<String, Object> testMetadata = new HashMap<>();
+        testMetadata.put("category", "test");
         MemoryService.Memory memory = new MemoryService.Memory(
             "test-id",
             "This is a test memory content that is longer than fifty characters to test truncation",
             "user123",
             "general",
             0.95,
-            Map.of("category", "test")
+            testMetadata
         );
         
         String memoryString = memory.toString();

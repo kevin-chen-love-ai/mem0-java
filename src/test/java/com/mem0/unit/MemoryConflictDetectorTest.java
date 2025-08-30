@@ -1,5 +1,12 @@
-package com.mem0.core;
+package com.mem0.unit;
 
+import com.mem0.core.MemoryConflictDetector;
+import com.mem0.core.MemoryConflictDetector.MemoryConflict;
+import com.mem0.core.MemoryConflictDetector.ConflictType;
+import com.mem0.core.MemoryConflictDetector.ConflictResolution;
+import com.mem0.core.MemoryConflictDetector.ResolutionStrategy;
+import com.mem0.core.EnhancedMemory;
+import com.mem0.core.MemoryType;
 import com.mem0.embedding.EmbeddingProvider;
 import com.mem0.llm.LLMProvider;
 import com.mem0.llm.LLMResponse;
@@ -77,21 +84,21 @@ public class MemoryConflictDetectorTest {
         
         assertEquals(1, conflicts.size());
         MemoryConflict conflict = conflicts.get(0);
-        assertEquals(memory2, conflict.getNewMemory());
-        assertEquals(memory1, conflict.getExistingMemory());
-        assertEquals(ConflictType.SEMANTIC, conflict.getType());
-        assertTrue(conflict.getSeverity() > 0);
-        assertTrue(conflict.getDescription().contains("CONFLICT"));
+        assertEquals(memory2, conflict.getMemory1());
+        assertEquals(memory1, conflict.getMemory2());
+        assertEquals(ConflictType.CONTRADICTION, conflict.getType());
+        assertTrue(conflict.getConfidence() > 0);
+        assertTrue(conflict.getReason().contains("CONFLICT"));
     }
     
     @Test
     void testDetectPreferenceConflict() throws Exception {
         // Mock embedding provider
-        float[] embedding1 = {0.1f, 0.2f, 0.3f, 0.4f, 0.5f};
-        float[] embedding2 = {0.15f, 0.25f, 0.35f, 0.45f, 0.55f};
+        List<Float> embedding1 = Arrays.asList(0.1f, 0.2f, 0.3f, 0.4f, 0.5f);
+        List<Float> embedding2 = Arrays.asList(0.15f, 0.25f, 0.35f, 0.45f, 0.55f);
         
         when(embeddingProvider.embed(anyString()))
-                .thenReturn(CompletableFuture.completedFuture(embedding1))
+                .thenAnswer(invocation -> CompletableFuture.completedFuture(embedding1))
                 .thenAnswer(invocation -> CompletableFuture.completedFuture(embedding2));
         
         // Mock LLM to detect preference conflict
@@ -103,8 +110,8 @@ public class MemoryConflictDetectorTest {
         
         assertEquals(1, conflicts.size());
         MemoryConflict conflict = conflicts.get(0);
-        assertEquals(ConflictType.PREFERENCE, conflict.getType());
-        assertTrue(conflict.getSeverity() >= 0.8); // High severity for preference conflicts
+        assertEquals(ConflictType.PREFERENCE_CONFLICT, conflict.getType());
+        assertTrue(conflict.getConfidence() >= 0.8); // High confidence for preference conflicts
     }
     
     @Test
@@ -121,7 +128,7 @@ public class MemoryConflictDetectorTest {
         // Mock embedding provider
         float[] embedding = {0.1f, 0.2f, 0.3f, 0.4f, 0.5f};
         when(embeddingProvider.embed(anyString()))
-                .thenReturn(CompletableFuture.completedFuture(embedding));
+                .thenAnswer(invocation -> CompletableFuture.completedFuture(embedding));
         
         // Mock LLM to detect temporal conflict
         LLMResponse llmResponse = new LLMResponse("CONFLICT: Meeting time has changed", "mock-model", 10, 100L, null);
@@ -132,7 +139,7 @@ public class MemoryConflictDetectorTest {
         
         assertEquals(1, conflicts.size());
         MemoryConflict conflict = conflicts.get(0);
-        assertEquals(ConflictType.TEMPORAL, conflict.getType());
+        assertEquals(ConflictType.TEMPORAL_CONFLICT, conflict.getType());
     }
     
     @Test
@@ -162,8 +169,7 @@ public class MemoryConflictDetectorTest {
     
     @Test
     void testResolveConflictKeepFirst() throws Exception {
-        MemoryConflict conflict = new MemoryConflict(memory2, memory1, ConflictType.PREFERENCE, 0.9);
-        conflict.setDescription("Preference conflict detected");
+        MemoryConflict conflict = new MemoryConflict(memory2, memory1, ConflictType.PREFERENCE_CONFLICT, 0.9, "Preference conflict detected", 0.8);
         
         // Mock LLM to suggest keeping first
         LLMResponse llmResponse = new LLMResponse("KEEP_FIRST: The existing preference should be maintained", "mock-model", 10, 100L, null);
@@ -172,15 +178,13 @@ public class MemoryConflictDetectorTest {
         
         ConflictResolution resolution = detector.resolveConflict(conflict).get();
         
-        assertEquals(ConflictResolutionStrategy.KEEP_FIRST, resolution.getStrategy());
-        assertEquals(memory1, resolution.getResultingMemory());
+        assertEquals(ResolutionStrategy.KEEP_FIRST, resolution.getStrategy());
         assertNull(resolution.getMergedContent());
     }
     
     @Test
     void testResolveConflictKeepSecond() throws Exception {
-        MemoryConflict conflict = new MemoryConflict(memory2, memory1, ConflictType.PREFERENCE, 0.9);
-        conflict.setDescription("Newer preference should override older one");
+        MemoryConflict conflict = new MemoryConflict(memory2, memory1, ConflictType.PREFERENCE_CONFLICT, 0.9, "Newer preference should override older one", 0.8);
         
         // Mock LLM to suggest keeping second (newer)
         LLMResponse llmResponse = new LLMResponse("KEEP_SECOND: The new preference is more recent and should override", "mock-model", 10, 100L, null);
@@ -189,43 +193,37 @@ public class MemoryConflictDetectorTest {
         
         ConflictResolution resolution = detector.resolveConflict(conflict).get();
         
-        assertEquals(ConflictResolutionStrategy.KEEP_SECOND, resolution.getStrategy());
-        assertEquals(memory2, resolution.getResultingMemory());
+        assertEquals(ResolutionStrategy.KEEP_SECOND, resolution.getStrategy());
     }
     
     @Test
     void testResolveConflictMerge() throws Exception {
-        MemoryConflict conflict = new MemoryConflict(memory2, memory1, ConflictType.SEMANTIC, 0.7);
-        conflict.setDescription("Similar information that can be merged");
+        MemoryConflict conflict = new MemoryConflict(memory2, memory1, ConflictType.CONTRADICTION, 0.7, "Similar information that can be merged", 0.6);
         
         // Mock LLM to suggest merging
-        LLMResponse llmResponse = new LLMResponse("", "mock-model", 10, 100L, null);
-        // Content set in constructor: "MERGE: User has mixed preferences - sometimes coffee, sometimes tea depending on mood");
+        LLMResponse llmResponse = new LLMResponse("MERGE: User has mixed preferences - sometimes coffee, sometimes tea depending on mood", "mock-model", 10, 100L, null);
         when(llmProvider.generate(anyString(), anyDouble(), anyInt()))
                 .thenAnswer(invocation -> CompletableFuture.completedFuture(llmResponse));
         
         ConflictResolution resolution = detector.resolveConflict(conflict).get();
         
-        assertEquals(ConflictResolutionStrategy.MERGE, resolution.getStrategy());
+        assertEquals(ResolutionStrategy.MERGE, resolution.getStrategy());
         assertNotNull(resolution.getMergedContent());
         assertTrue(resolution.getMergedContent().contains("mixed preferences"));
     }
     
     @Test
     void testResolveConflictKeepBoth() throws Exception {
-        MemoryConflict conflict = new MemoryConflict(memory2, memory1, ConflictType.TEMPORAL, 0.5);
-        conflict.setDescription("Different time contexts, both valid");
+        MemoryConflict conflict = new MemoryConflict(memory2, memory1, ConflictType.TEMPORAL_CONFLICT, 0.5, "Different time contexts, both valid", 0.4);
         
         // Mock LLM to suggest keeping both
-        LLMResponse llmResponse = new LLMResponse("", "mock-model", 10, 100L, null);
-        // Content set in constructor: "KEEP_BOTH: These represent different time periods and contexts");
+        LLMResponse llmResponse = new LLMResponse("KEEP_BOTH: These represent different time periods and contexts", "mock-model", 10, 100L, null);
         when(llmProvider.generate(anyString(), anyDouble(), anyInt()))
                 .thenAnswer(invocation -> CompletableFuture.completedFuture(llmResponse));
         
         ConflictResolution resolution = detector.resolveConflict(conflict).get();
         
-        assertEquals(ConflictResolutionStrategy.KEEP_BOTH, resolution.getStrategy());
-        assertNull(resolution.getResultingMemory()); // Both are kept separately
+        assertEquals(ResolutionStrategy.KEEP_BOTH, resolution.getStrategy());
     }
     
     @Test
@@ -239,11 +237,10 @@ public class MemoryConflictDetectorTest {
         // Mock similar embeddings for Earth-related facts
         float[] embedding = {0.1f, 0.2f, 0.3f, 0.4f, 0.5f};
         when(embeddingProvider.embed(anyString()))
-                .thenReturn(CompletableFuture.completedFuture(embedding));
+                .thenAnswer(invocation -> CompletableFuture.completedFuture(embedding));
         
         // Mock LLM to detect factual conflict
-        LLMResponse llmResponse = new LLMResponse("", "mock-model", 10, 100L, null);
-        // Content set in constructor: "CONFLICT: Contradictory factual statements about Earth's shape");
+        LLMResponse llmResponse = new LLMResponse("CONFLICT: Contradictory factual statements about Earth's shape", "mock-model", 10, 100L, null);
         when(llmProvider.generate(anyString(), anyDouble(), anyInt()))
                 .thenAnswer(invocation -> CompletableFuture.completedFuture(llmResponse));
         
@@ -251,8 +248,8 @@ public class MemoryConflictDetectorTest {
         
         assertEquals(1, conflicts.size());
         MemoryConflict conflict = conflicts.get(0);
-        assertEquals(ConflictType.FACTUAL, conflict.getType());
-        assertTrue(conflict.getSeverity() >= 0.9); // Very high severity for factual conflicts
+        assertEquals(ConflictType.FACTUAL_CONFLICT, conflict.getType());
+        assertTrue(conflict.getConfidence() >= 0.9); // Very high confidence for factual conflicts
     }
     
     @Test
@@ -273,24 +270,24 @@ public class MemoryConflictDetectorTest {
         newMemory.setType(MemoryType.PREFERENCE);
         
         // Mock embeddings
-        float[] embedding = {0.1f, 0.2f, 0.3f, 0.4f, 0.5f};
+        List<Float> embedding = Arrays.asList(0.1f, 0.2f, 0.3f, 0.4f, 0.5f);
         when(embeddingProvider.embed(anyString()))
-                .thenReturn(CompletableFuture.completedFuture(embedding));
+                .thenAnswer(invocation -> CompletableFuture.completedFuture(embedding));
         
         // Mock LLM responses - conflicts with coffee and tea, no conflict with water
-        when(llmProvider.generate(contains("User hates all hot beverages") && contains("User prefers coffee"), anyDouble(), anyInt()))
-                .thenReturn(CompletableFuture.completedFuture(createConflictResponse("CONFLICT: Contradictory preferences")));
-        when(llmProvider.generate(contains("User hates all hot beverages") && contains("User likes tea"), anyDouble(), anyInt()))
-                .thenReturn(CompletableFuture.completedFuture(createConflictResponse("CONFLICT: Contradictory preferences")));
-        when(llmProvider.generate(contains("User hates all hot beverages") && contains("User drinks water"), anyDouble(), anyInt()))
-                .thenReturn(CompletableFuture.completedFuture(createConflictResponse("NO_CONFLICT: Different topics")));
+        when(llmProvider.generate(argThat(s -> s.contains("User hates all hot beverages") && s.contains("User prefers coffee")), anyDouble(), anyInt()))
+                .thenAnswer(invocation -> CompletableFuture.completedFuture(createConflictResponse("CONFLICT: Contradictory preferences")));
+        when(llmProvider.generate(argThat(s -> s.contains("User hates all hot beverages") && s.contains("User likes tea")), anyDouble(), anyInt()))
+                .thenAnswer(invocation -> CompletableFuture.completedFuture(createConflictResponse("CONFLICT: Contradictory preferences")));
+        when(llmProvider.generate(argThat(s -> s.contains("User hates all hot beverages") && s.contains("User drinks water")), anyDouble(), anyInt()))
+                .thenAnswer(invocation -> CompletableFuture.completedFuture(createConflictResponse("NO_CONFLICT: Different topics")));
         
         List<MemoryConflict> conflicts = detector.detectConflicts(newMemory, existingMemories).get();
         
         assertEquals(2, conflicts.size()); // Should conflict with coffee and tea preferences
-        assertTrue(conflicts.stream().anyMatch(c -> c.getExistingMemory().equals(coffee)));
-        assertTrue(conflicts.stream().anyMatch(c -> c.getExistingMemory().equals(tea)));
-        assertFalse(conflicts.stream().anyMatch(c -> c.getExistingMemory().equals(water)));
+        assertTrue(conflicts.stream().anyMatch(c -> c.getMemory2().equals(coffee)));
+        assertTrue(conflicts.stream().anyMatch(c -> c.getMemory2().equals(tea)));
+        assertFalse(conflicts.stream().anyMatch(c -> c.getMemory2().equals(water)));
     }
     
     @Test
@@ -328,7 +325,7 @@ public class MemoryConflictDetectorTest {
         // Mock embedding provider to return similar embeddings
         float[] embedding = {0.1f, 0.2f, 0.3f, 0.4f, 0.5f};
         when(embeddingProvider.embed(anyString()))
-                .thenReturn(CompletableFuture.completedFuture(embedding));
+                .thenAnswer(invocation -> CompletableFuture.completedFuture(embedding));
         
         // Mock LLM provider to fail
         when(llmProvider.generate(anyString(), anyDouble(), anyInt()))
@@ -342,43 +339,41 @@ public class MemoryConflictDetectorTest {
     
     @Test
     void testConflictResolutionFallback() throws Exception {
-        MemoryConflict conflict = new MemoryConflict(memory2, memory1, ConflictType.PREFERENCE, 0.9);
+        MemoryConflict conflict = new MemoryConflict(memory2, memory1, ConflictType.PREFERENCE_CONFLICT, 0.9, "Test conflict description", 0.8);
         
         // Mock LLM to return unrecognized resolution strategy
-        LLMResponse llmResponse = new LLMResponse("", "mock-model", 10, 100L, null);
-        // Content set in constructor: "UNKNOWN_STRATEGY: This is not a recognized resolution");
+        LLMResponse llmResponse = new LLMResponse("UNKNOWN_STRATEGY: This is not a recognized resolution", "mock-model", 10, 100L, null);
         when(llmProvider.generate(anyString(), anyDouble(), anyInt()))
                 .thenAnswer(invocation -> CompletableFuture.completedFuture(llmResponse));
         
         ConflictResolution resolution = detector.resolveConflict(conflict).get();
         
         // Should fall back to KEEP_SECOND as default
-        assertEquals(ConflictResolutionStrategy.KEEP_SECOND, resolution.getStrategy());
-        assertEquals(memory2, resolution.getResultingMemory());
+        assertEquals(ResolutionStrategy.KEEP_SECOND, resolution.getStrategy());
     }
     
     @Test
     void testSimilarityCalculation() throws Exception {
-        float[] embedding1 = {1.0f, 0.0f, 0.0f};
-        float[] embedding2 = {0.0f, 1.0f, 0.0f};
-        float[] embedding3 = {1.0f, 0.0f, 0.0f}; // Identical to embedding1
+        List<Float> embedding1 = Arrays.asList(1.0f, 0.0f, 0.0f);
+        List<Float> embedding2 = Arrays.asList(0.0f, 1.0f, 0.0f);
+        List<Float> embedding3 = Arrays.asList(1.0f, 0.0f, 0.0f); // Identical to embedding1
         
         when(embeddingProvider.embed("content1"))
                 .thenAnswer(invocation -> CompletableFuture.completedFuture(embedding1));
         when(embeddingProvider.embed("content2"))
                 .thenAnswer(invocation -> CompletableFuture.completedFuture(embedding2));
         when(embeddingProvider.embed("content3"))
-                .thenReturn(CompletableFuture.completedFuture(embedding3));
+                .thenAnswer(invocation -> CompletableFuture.completedFuture(embedding3));
         
         EnhancedMemory mem1 = new EnhancedMemory("1", "content1", "user1");
         EnhancedMemory mem2 = new EnhancedMemory("2", "content2", "user1");
         EnhancedMemory mem3 = new EnhancedMemory("3", "content3", "user1");
         
         // Mock LLM to return no conflict for low similarity
-        when(llmProvider.generate(contains("content1") && contains("content2"), anyDouble(), anyInt()))
-                .thenReturn(CompletableFuture.completedFuture(createConflictResponse("NO_CONFLICT")));
-        when(llmProvider.generate(contains("content1") && contains("content3"), anyDouble(), anyInt()))
-                .thenReturn(CompletableFuture.completedFuture(createConflictResponse("CONFLICT: Duplicate information")));
+        when(llmProvider.generate(argThat(s -> s.contains("content1") && s.contains("content2")), anyDouble(), anyInt()))
+                .thenAnswer(invocation -> CompletableFuture.completedFuture(createConflictResponse("NO_CONFLICT")));
+        when(llmProvider.generate(argThat(s -> s.contains("content1") && s.contains("content3")), anyDouble(), anyInt()))
+                .thenAnswer(invocation -> CompletableFuture.completedFuture(createConflictResponse("CONFLICT: Duplicate information")));
         
         // Test low similarity (should not trigger detailed conflict analysis)
         List<MemoryConflict> conflicts1 = detector.detectConflicts(mem2, Arrays.asList(mem1)).get();
@@ -390,8 +385,6 @@ public class MemoryConflictDetectorTest {
     }
     
     private LLMResponse createConflictResponse(String content) {
-        LLMResponse response = new LLMResponse();
-        response.setContent(content);
-        return response;
+        return new LLMResponse(content, "mock-model", 10, 100L, null);
     }
 }

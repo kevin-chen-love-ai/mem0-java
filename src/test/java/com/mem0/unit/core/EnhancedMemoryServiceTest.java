@@ -1,10 +1,14 @@
-package com.mem0.unit.core;
+package com.mem0.core;
 
-import com.mem0.config.Mem0Config;
 import com.mem0.core.EnhancedMemory;
 import com.mem0.core.EnhancedMemoryService;
+import com.mem0.core.MemoryClassifier;
+import com.mem0.core.MemoryConflictDetector;
+import com.mem0.core.MemoryMergeStrategy;
+import com.mem0.core.MemoryImportanceScorer;
+import com.mem0.core.MemoryForgettingManager;
 import com.mem0.embedding.EmbeddingProvider;
-import com.mem0.graph.GraphStore;
+import com.mem0.store.GraphStore;
 import com.mem0.llm.LLMProvider;
 import com.mem0.store.VectorStore;
 import org.junit.Before;
@@ -32,7 +36,11 @@ public class EnhancedMemoryServiceTest {
     @Mock private GraphStore graphStore;
     @Mock private EmbeddingProvider embeddingProvider;
     @Mock private LLMProvider llmProvider;
-    @Mock private Mem0Config config;
+    @Mock private MemoryClassifier memoryClassifier;
+    @Mock private MemoryConflictDetector conflictDetector;
+    @Mock private MemoryMergeStrategy mergeStrategy;
+    @Mock private MemoryImportanceScorer importanceScorer;
+    @Mock private MemoryForgettingManager forgettingManager;
 
     private EnhancedMemoryService memoryService;
     private AutoCloseable closeable;
@@ -48,14 +56,11 @@ public class EnhancedMemoryServiceTest {
     public void setUp() throws Exception {
         closeable = MockitoAnnotations.openMocks(this);
         
-        // 配置默认的mock行为
-        when(config.getVectorDimension()).thenReturn(128);
-        when(config.getMaxMemoriesPerUser()).thenReturn(10000);
-        when(config.isEnableCache()).thenReturn(true);
-        
         // 创建服务实例
         memoryService = new EnhancedMemoryService(
-            vectorStore, graphStore, embeddingProvider, llmProvider, config
+            vectorStore, graphStore, embeddingProvider, llmProvider,
+            memoryClassifier, conflictDetector, mergeStrategy, 
+            importanceScorer, forgettingManager
         );
     }
     
@@ -82,11 +87,11 @@ public class EnhancedMemoryServiceTest {
             .thenReturn(CompletableFuture.completedFuture(null));
         when(vectorStore.insert(anyString(), any(), any()))
             .thenReturn(CompletableFuture.completedFuture("memory123"));
-        when(graphStore.addMemory(any(EnhancedMemory.class)))
-            .thenReturn(CompletableFuture.completedFuture(null));
+        when(graphStore.createNode(anyString(), any()))
+            .thenReturn(CompletableFuture.completedFuture("node123"));
         
         // 执行测试
-        CompletableFuture<String> future = memoryService.addMemory(content, userId);
+        CompletableFuture<String> future = memoryService.addEnhancedMemory(content, userId, null, null, null, null);
         String memoryId = future.get();
         
         // 验证结果
@@ -95,13 +100,13 @@ public class EnhancedMemoryServiceTest {
         // 验证调用
         verify(embeddingProvider).embed(content);
         verify(vectorStore).insert(anyString(), eq(embedding), any());
-        verify(graphStore).addMemory(any(EnhancedMemory.class));
+        verify(graphStore).createNode(anyString(), any());
     }
 
     @Test
     public void testAddMemory_EmptyContent() throws Exception {
         // 测试空内容
-        CompletableFuture<String> future = memoryService.addMemory("", "user123");
+        CompletableFuture<String> future = memoryService.addEnhancedMemory("", "user123", null, null, null, null);
         
         try {
             future.get();
@@ -115,7 +120,7 @@ public class EnhancedMemoryServiceTest {
     @Test
     public void testAddMemory_NullUserId() throws Exception {
         // 测试空用户ID
-        CompletableFuture<String> future = memoryService.addMemory("测试内容", null);
+        CompletableFuture<String> future = memoryService.addEnhancedMemory("测试内容", null, null, null, null, null);
         
         try {
             future.get();
@@ -133,7 +138,7 @@ public class EnhancedMemoryServiceTest {
             .thenReturn(createFailedFuture(new RuntimeException("嵌入服务错误")));
         
         // 执行测试
-        CompletableFuture<String> future = memoryService.addMemory("测试内容", "user123");
+        CompletableFuture<String> future = memoryService.addEnhancedMemory("测试内容", "user123", null, null, null, null);
         
         try {
             future.get();
@@ -168,7 +173,7 @@ public class EnhancedMemoryServiceTest {
         
         // 执行测试
         CompletableFuture<List<EnhancedMemory>> future = 
-            memoryService.searchMemories(query, userId, 10);
+            memoryService.searchEnhancedMemories(query, userId, 10);
         List<EnhancedMemory> results = future.get();
         
         // 验证结果
@@ -192,7 +197,7 @@ public class EnhancedMemoryServiceTest {
         
         // 执行测试
         CompletableFuture<List<EnhancedMemory>> future = 
-            memoryService.searchMemories("不存在的内容", "user123", 10);
+            memoryService.searchEnhancedMemories("不存在的内容", "user123", 10);
         List<EnhancedMemory> results = future.get();
         
         // 验证结果
@@ -216,22 +221,26 @@ public class EnhancedMemoryServiceTest {
             .thenReturn(CompletableFuture.completedFuture(existingMemory));
         when(embeddingProvider.embed(newContent))
             .thenReturn(CompletableFuture.completedFuture(newEmbedding));
-        when(vectorStore.update(anyString(), anyString(), any(), any()))
+        when(vectorStore.delete(anyString(), anyString()))
             .thenReturn(CompletableFuture.completedFuture(null));
+        when(vectorStore.insert(anyString(), any(), any()))
+            .thenReturn(CompletableFuture.completedFuture("memory123"));
         when(graphStore.updateMemory(any(EnhancedMemory.class)))
             .thenReturn(CompletableFuture.completedFuture(null));
         
         // 执行测试
-        CompletableFuture<String> future = memoryService.updateMemory(memoryId, newContent);
-        String updatedId = future.get();
+        CompletableFuture<EnhancedMemory> future = memoryService.updateEnhancedMemory(memoryId, newContent, null);
+        EnhancedMemory updatedMemory = future.get();
         
         // 验证结果
-        assertEquals("更新后的ID应该相同", memoryId, updatedId);
+        assertNotNull("更新后的内存不应该为空", updatedMemory);
+        assertEquals("更新后的ID应该相同", memoryId, updatedMemory.getId());
         
         // 验证调用
         verify(graphStore).getMemory(memoryId);
         verify(embeddingProvider).embed(newContent);
-        verify(vectorStore).update(anyString(), eq(memoryId), eq(newEmbedding), any());
+        verify(vectorStore).delete(anyString(), eq(memoryId));
+        verify(vectorStore).insert(anyString(), eq(newEmbedding), any());
         verify(graphStore).updateMemory(any(EnhancedMemory.class));
     }
 
@@ -242,7 +251,7 @@ public class EnhancedMemoryServiceTest {
             .thenReturn(CompletableFuture.completedFuture(null));
         
         // 执行测试
-        CompletableFuture<String> future = memoryService.updateMemory("nonexistent", "新内容");
+        CompletableFuture<EnhancedMemory> future = memoryService.updateEnhancedMemory("nonexistent", "新内容", null);
         
         try {
             future.get();
@@ -266,7 +275,7 @@ public class EnhancedMemoryServiceTest {
             .thenReturn(CompletableFuture.completedFuture(null));
         
         // 执行测试
-        CompletableFuture<Void> future = memoryService.deleteMemory(memoryId, "user123");
+        CompletableFuture<Void> future = memoryService.deleteEnhancedMemory(memoryId);
         future.get(); // 不应该抛出异常
         
         // 验证调用
@@ -281,7 +290,7 @@ public class EnhancedMemoryServiceTest {
             .thenReturn(createFailedFuture(new RuntimeException("删除失败")));
         
         // 执行测试
-        CompletableFuture<Void> future = memoryService.deleteMemory("memory123", "user123");
+        CompletableFuture<Void> future = memoryService.deleteEnhancedMemory("memory123");
         
         try {
             future.get();
@@ -306,7 +315,7 @@ public class EnhancedMemoryServiceTest {
             .thenReturn(CompletableFuture.completedFuture(memories));
         
         // 执行测试
-        CompletableFuture<List<EnhancedMemory>> future = memoryService.getAllMemories(userId);
+        CompletableFuture<List<EnhancedMemory>> future = memoryService.getAllEnhancedMemories(userId, null);
         List<EnhancedMemory> results = future.get();
         
         // 验证结果
@@ -333,7 +342,7 @@ public class EnhancedMemoryServiceTest {
             .thenReturn(CompletableFuture.completedFuture(history));
         
         // 执行测试
-        CompletableFuture<List<EnhancedMemory>> future = memoryService.getMemoryHistory(userId);
+        CompletableFuture<List<EnhancedMemory>> future = memoryService.getAllEnhancedMemories(userId, null);
         List<EnhancedMemory> results = future.get();
         
         // 验证结果
@@ -347,10 +356,8 @@ public class EnhancedMemoryServiceTest {
     @Test
     public void testClose() throws Exception {
         // 配置mocks
-        when(vectorStore.close()).thenReturn(CompletableFuture.completedFuture(null));
-        when(graphStore.close()).thenReturn(CompletableFuture.completedFuture(null));
-        when(embeddingProvider.close()).thenReturn(CompletableFuture.completedFuture(null));
-        when(llmProvider.close()).thenReturn(CompletableFuture.completedFuture(null));
+        when(vectorStore.close()).thenReturn(CompletableFuture.runAsync(() -> {}));
+        when(graphStore.close()).thenReturn(CompletableFuture.runAsync(() -> {}));
         
         // 执行测试
         memoryService.close();
@@ -373,14 +380,14 @@ public class EnhancedMemoryServiceTest {
             .thenReturn(CompletableFuture.completedFuture(true));
         when(vectorStore.insert(anyString(), any(), any()))
             .thenReturn(CompletableFuture.completedFuture("memory123"));
-        when(graphStore.addMemory(any(EnhancedMemory.class)))
-            .thenReturn(CompletableFuture.completedFuture(null));
+        when(graphStore.createNode(anyString(), any()))
+            .thenReturn(CompletableFuture.completedFuture("node123"));
         
         // 并发添加多个内存
         CompletableFuture<String>[] futures = new CompletableFuture[10];
         for (int i = 0; i < 10; i++) {
             final int index = i;
-            futures[i] = memoryService.addMemory("内容" + index, userId);
+            futures[i] = memoryService.addEnhancedMemory("内容" + index, userId, null, null, null, null);
         }
         
         // 等待所有操作完成

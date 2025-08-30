@@ -163,6 +163,7 @@ public class MemoryForgettingManager {
     private final ForgettingPolicy defaultPolicy;
     private final Map<MemoryType, ForgettingPolicy> typePolicies;
     private final double memoryRetentionThreshold;
+    private MemoryForgettingPolicy customPolicy;
     
     public MemoryForgettingManager() {
         this(0.5, 0.1, 0.2);
@@ -177,6 +178,16 @@ public class MemoryForgettingManager {
         
         this.defaultPolicy = ForgettingPolicy.GRADUAL_DECAY;
         this.typePolicies = initializeTypePolicies();
+    }
+    
+    /**
+     * Set a custom forgetting policy that overrides the default behavior
+     * @param policy the custom policy to apply
+     */
+    public void setForgettingPolicy(MemoryForgettingPolicy policy) {
+        this.customPolicy = policy;
+        logger.debug("Custom forgetting policy set: enabled={}, decayRate={}, importanceThreshold={}", 
+                    policy.isForgettingEnabled(), policy.getDecayRate(), policy.getImportanceThreshold());
     }
     
     public CompletableFuture<List<EnhancedMemory>> processMemoryDecay(List<EnhancedMemory> memories) {
@@ -277,6 +288,29 @@ public class MemoryForgettingManager {
     }
     
     private boolean shouldForgetMemory(EnhancedMemory memory) {
+        // Check custom policy first
+        if (customPolicy != null) {
+            // If forgetting is disabled, never forget
+            if (!customPolicy.isForgettingEnabled()) {
+                return false;
+            }
+            
+            // Check importance threshold
+            if (memory.getImportance().ordinal() >= customPolicy.getImportanceThreshold().ordinal()) {
+                return false;
+            }
+            
+            // Check access count
+            if (memory.getAccessCount() >= customPolicy.getMinAccessCount()) {
+                return false;
+            }
+            
+            // Check age
+            if (memory.getDaysOld() <= customPolicy.getMaxMemoryAge()) {
+                return false;
+            }
+        }
+        
         // Never forget critical memories
         if (memory.getImportance() == MemoryImportance.CRITICAL) {
             return false;

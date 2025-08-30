@@ -720,6 +720,71 @@ public class Mem0 implements AutoCloseable {
                 }
                 return java.util.concurrent.CompletableFuture.completedFuture(null);
             }
+            
+            // Memory-specific methods implementation
+            
+            @Override
+            public java.util.concurrent.CompletableFuture<Void> addMemory(com.mem0.core.EnhancedMemory memory) {
+                // Simple implementation that stores memory properties
+                if (memory != null) {
+                    java.util.Map<String, Object> properties = new java.util.HashMap<>();
+                    properties.put("id", memory.getId());
+                    properties.put("content", memory.getContent());
+                    properties.put("userId", memory.getUserId());
+                    nodes.put(memory.getId(), properties);
+                }
+                return java.util.concurrent.CompletableFuture.completedFuture(null);
+            }
+            
+            @Override
+            public java.util.concurrent.CompletableFuture<com.mem0.core.EnhancedMemory> getMemory(String memoryId) {
+                // Simple implementation that returns null (since this is a fallback)
+                return java.util.concurrent.CompletableFuture.completedFuture(null);
+            }
+            
+            @Override
+            public java.util.concurrent.CompletableFuture<Void> updateMemory(com.mem0.core.EnhancedMemory memory) {
+                // Simple implementation that updates memory properties
+                if (memory != null) {
+                    java.util.Map<String, Object> properties = new java.util.HashMap<>();
+                    properties.put("id", memory.getId());
+                    properties.put("content", memory.getContent());
+                    properties.put("userId", memory.getUserId());
+                    nodes.put(memory.getId(), properties);
+                }
+                return java.util.concurrent.CompletableFuture.completedFuture(null);
+            }
+            
+            @Override
+            public java.util.concurrent.CompletableFuture<Void> deleteMemory(String memoryId) {
+                nodes.remove(memoryId);
+                return java.util.concurrent.CompletableFuture.completedFuture(null);
+            }
+            
+            @Override
+            public java.util.concurrent.CompletableFuture<java.util.List<com.mem0.core.EnhancedMemory>> getUserMemories(String userId) {
+                // Simple implementation that returns empty list
+                return java.util.concurrent.CompletableFuture.completedFuture(new java.util.ArrayList<>());
+            }
+            
+            @Override
+            public java.util.concurrent.CompletableFuture<java.util.List<com.mem0.core.EnhancedMemory>> getMemoryHistory(String userId) {
+                // Simple implementation that returns empty list
+                return java.util.concurrent.CompletableFuture.completedFuture(new java.util.ArrayList<>());
+            }
+            
+            @Override
+            public java.util.concurrent.CompletableFuture<java.util.List<com.mem0.core.EnhancedMemory>> searchMemories(String query, String userId, int limit) {
+                // Simple implementation that returns empty list
+                return java.util.concurrent.CompletableFuture.completedFuture(new java.util.ArrayList<>());
+            }
+            
+            @Override
+            public java.util.concurrent.CompletableFuture<Void> addRelationship(String fromMemoryId, String toMemoryId, 
+                                                                              String relationshipType, java.util.Map<String, Object> properties) {
+                // Simple implementation that just returns success
+                return java.util.concurrent.CompletableFuture.completedFuture(null);
+            }
         };
     }
 }

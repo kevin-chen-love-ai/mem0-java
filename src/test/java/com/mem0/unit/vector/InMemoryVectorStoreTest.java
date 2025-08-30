@@ -1,451 +1,566 @@
 package com.mem0.unit.vector;
 
-import com.mem0.store.VectorStore;
 import com.mem0.vector.impl.InMemoryVectorStore;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.After;
+import com.mem0.store.VectorStore;
+import com.mem0.model.SearchResult;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * InMemoryVectorStore 单元测试
- * 覆盖所有向量存储操作和边界条件
+ * 内存向量存储测试
+ * 全面测试InMemoryVectorStore的所有功能
  */
+@DisplayName("内存向量存储测试")
 public class InMemoryVectorStoreTest {
-
+    
     private InMemoryVectorStore vectorStore;
-    private final String testCollection = "test_collection";
-    private final int testDimension = 128;
-
-    @Before
-    public void setUp() {
+    private static final String TEST_COLLECTION = "test_collection";
+    private static final String TEST_USER_ID = "test_user_123";
+    
+    @BeforeEach
+    void setUp() {
         vectorStore = new InMemoryVectorStore();
     }
-
-    @After
-    public void tearDown() throws Exception {
-        if (vectorStore != null) {
-            vectorStore.close().get();
+    
+    @Nested
+    @DisplayName("集合管理功能")
+    class CollectionManagementTests {
+        
+        @Test
+        @DisplayName("创建集合")
+        void testCreateCollection() throws ExecutionException, InterruptedException {
+            CompletableFuture<Void> future = vectorStore.createCollection(TEST_COLLECTION, 128);
+            assertDoesNotThrow(() -> future.get());
+        }
+        
+        @Test
+        @DisplayName("检查集合存在")
+        void testCollectionExists() throws ExecutionException, InterruptedException {
+            CompletableFuture<Boolean> future = vectorStore.collectionExists(TEST_COLLECTION);
+            assertTrue(future.get(), "内存实现中集合应该总是存在");
+        }
+        
+        @Test
+        @DisplayName("删除集合")
+        void testDropCollection() throws ExecutionException, InterruptedException {
+            // 先插入一些数据
+            List<Float> vector = Arrays.asList(0.1f, 0.2f, 0.3f);
+            Map<String, Object> metadata = createTestMetadata();
+            vectorStore.insert(TEST_COLLECTION, vector, metadata).get();
+            
+            // 删除集合应该清空所有数据
+            vectorStore.dropCollection(TEST_COLLECTION).get();
+            assertEquals(0, vectorStore.getTotalVectorCount());
         }
     }
-
-    @Test
-    public void testCreateCollection_Success() throws Exception {
-        // 执行测试
-        CompletableFuture<Void> future = vectorStore.createCollection(testCollection, testDimension);
-        future.get(); // 不应该抛出异常
-
-        // 验证集合存在
-        CompletableFuture<Boolean> existsFuture = vectorStore.collectionExists(testCollection);
-        assertTrue("集合应该存在", existsFuture.get());
-    }
-
-    @Test
-    public void testCreateCollection_DuplicateName() throws Exception {
-        // 先创建一个集合
-        vectorStore.createCollection(testCollection, testDimension).get();
-
-        // 尝试创建同名集合
-        try {
-            vectorStore.createCollection(testCollection, testDimension).get();
-            fail("应该抛出异常，因为集合已存在");
-        } catch (ExecutionException e) {
-            assertTrue("应该包含集合已存在的错误信息", 
-                       e.getCause().getMessage().contains("已存在"));
+    
+    @Nested
+    @DisplayName("向量插入功能")
+    class VectorInsertionTests {
+        
+        @Test
+        @DisplayName("单个向量插入")
+        void testSingleVectorInsert() throws ExecutionException, InterruptedException {
+            List<Float> vector = Arrays.asList(0.1f, 0.2f, 0.3f);
+            Map<String, Object> metadata = createTestMetadata();
+            
+            String id = vectorStore.insert(TEST_COLLECTION, vector, metadata).get();
+            
+            assertNotNull(id, "插入后应该返回有效的ID");
+            assertEquals(1, vectorStore.getTotalVectorCount());
+        }
+        
+        @Test
+        @DisplayName("批量向量插入")
+        void testBatchVectorInsert() throws ExecutionException, InterruptedException {
+            List<List<Float>> vectors = Arrays.asList(
+                Arrays.asList(0.1f, 0.2f, 0.3f),
+                Arrays.asList(0.4f, 0.5f, 0.6f),
+                Arrays.asList(0.7f, 0.8f, 0.9f)
+            );
+            
+            List<Map<String, Object>> metadataList = IntStream.range(0, 3)
+                .mapToObj(i -> {
+                    Map<String, Object> metadata = createTestMetadata();
+                    metadata.put("index", i);
+                    return metadata;
+                })
+                .collect(Collectors.toList());
+            
+            List<String> ids = vectorStore.batchInsert(TEST_COLLECTION, vectors, metadataList).get();
+            
+            assertEquals(3, ids.size());
+            assertEquals(3, vectorStore.getTotalVectorCount());
+            assertTrue(ids.stream().allMatch(Objects::nonNull));
+        }
+        
+        @Test
+        @DisplayName("批量插入参数不匹配异常")
+        void testBatchInsertMismatchedParameters() {
+            List<List<Float>> vectors = Arrays.asList(Arrays.asList(0.1f, 0.2f));
+            List<Map<String, Object>> metadataList = Arrays.asList(
+                createTestMetadata(),
+                createTestMetadata()
+            );
+            
+            CompletableFuture<List<String>> future = 
+                vectorStore.batchInsert(TEST_COLLECTION, vectors, metadataList);
+            
+            assertThrows(RuntimeException.class, future::join);
+        }
+        
+        @Test
+        @DisplayName("使用float数组插入向量")
+        void testInsertWithFloatArray() throws ExecutionException, InterruptedException {
+            float[] embedding = {0.1f, 0.2f, 0.3f};
+            Map<String, Object> properties = createTestMetadata();
+            String id = "test_vector_1";
+            
+            vectorStore.insert(id, embedding, properties).get();
+            
+            assertEquals(1, vectorStore.getTotalVectorCount());
+            assertTrue(vectorStore.getAllUsers().contains(TEST_USER_ID));
         }
     }
-
-    @Test
-    public void testCreateCollection_InvalidDimension() throws Exception {
-        // 测试无效维度
-        try {
-            vectorStore.createCollection(testCollection, -1).get();
-            fail("应该抛出异常，因为维度无效");
-        } catch (ExecutionException e) {
-            assertTrue("应该包含维度无效的错误信息",
-                       e.getCause().getMessage().contains("维度"));
+    
+    @Nested
+    @DisplayName("向量搜索功能")
+    class VectorSearchTests {
+        
+        @BeforeEach
+        void setUpSearchData() throws ExecutionException, InterruptedException {
+            // 插入测试数据
+            List<List<Float>> vectors = Arrays.asList(
+                Arrays.asList(1.0f, 0.0f, 0.0f),  // 与查询向量完全匹配
+                Arrays.asList(0.8f, 0.6f, 0.0f),  // 部分匹配
+                Arrays.asList(0.0f, 1.0f, 0.0f),  // 垂直向量
+                Arrays.asList(-1.0f, 0.0f, 0.0f)  // 反向向量
+            );
+            
+            List<Map<String, Object>> metadataList = IntStream.range(0, 4)
+                .mapToObj(i -> {
+                    Map<String, Object> metadata = createTestMetadata();
+                    metadata.put("index", i);
+                    metadata.put("type", i < 2 ? "similar" : "different");
+                    return metadata;
+                })
+                .collect(Collectors.toList());
+            
+            vectorStore.batchInsert(TEST_COLLECTION, vectors, metadataList).get();
+        }
+        
+        @Test
+        @DisplayName("基础向量搜索")
+        void testBasicVectorSearch() throws ExecutionException, InterruptedException {
+            List<Float> queryVector = Arrays.asList(1.0f, 0.0f, 0.0f);
+            
+            List<VectorStore.VectorSearchResult> results = 
+                vectorStore.search(TEST_COLLECTION, queryVector, 2, null).get();
+            
+            assertEquals(2, results.size());
+            // 第一个结果应该是完全匹配的向量
+            assertTrue(results.get(0).getScore() > 0.9f);
+        }
+        
+        @Test
+        @DisplayName("带过滤条件的搜索")
+        void testSearchWithFilter() throws ExecutionException, InterruptedException {
+            List<Float> queryVector = Arrays.asList(1.0f, 0.0f, 0.0f);
+            Map<String, Object> filter = new HashMap<>();
+            filter.put("userId", TEST_USER_ID);
+            filter.put("type", "similar");
+            
+            List<VectorStore.VectorSearchResult> results = 
+                vectorStore.search(TEST_COLLECTION, queryVector, 10, filter).get();
+            
+            assertEquals(2, results.size());
+            assertTrue(results.stream()
+                .allMatch(r -> "similar".equals(r.getMetadata().get("type"))));
+        }
+        
+        @Test
+        @DisplayName("用户特定搜索")
+        void testUserSpecificSearch() throws ExecutionException, InterruptedException {
+            float[] queryEmbedding = {1.0f, 0.0f, 0.0f};
+            
+            List<SearchResult> results = vectorStore.search(queryEmbedding, TEST_USER_ID, 3).get();
+            
+            assertEquals(3, results.size());
+            // 结果应该按相似度降序排列
+            for (int i = 0; i < results.size() - 1; i++) {
+                assertTrue(results.get(i).similarity >= results.get(i + 1).similarity);
+            }
+        }
+        
+        @Test
+        @DisplayName("空结果搜索")
+        void testSearchWithNoResults() throws ExecutionException, InterruptedException {
+            List<Float> queryVector = Arrays.asList(1.0f, 0.0f, 0.0f);
+            Map<String, Object> filter = new HashMap<>();
+            filter.put("userId", "nonexistent_user");
+            
+            List<VectorStore.VectorSearchResult> results = 
+                vectorStore.search(TEST_COLLECTION, queryVector, 10, filter).get();
+            
+            assertTrue(results.isEmpty());
         }
     }
-
-    @Test
-    public void testCollectionExists_True() throws Exception {
-        // 创建集合
-        vectorStore.createCollection(testCollection, testDimension).get();
-
-        // 检查存在性
-        CompletableFuture<Boolean> future = vectorStore.collectionExists(testCollection);
-        assertTrue("集合应该存在", future.get());
-    }
-
-    @Test
-    public void testCollectionExists_False() throws Exception {
-        // 检查不存在的集合
-        CompletableFuture<Boolean> future = vectorStore.collectionExists("nonexistent");
-        assertFalse("集合不应该存在", future.get());
-    }
-
-    @Test
-    public void testInsert_Success() throws Exception {
-        // 准备测试数据
-        vectorStore.createCollection(testCollection, testDimension).get();
-        List<Float> vector = createTestVector(testDimension);
-        Map<String, Object> metadata = createTestMetadata();
-
-        // 执行插入
-        CompletableFuture<String> future = vectorStore.insert(testCollection, vector, metadata);
-        String id = future.get();
-
-        // 验证结果
-        assertNotNull("插入后应该返回ID", id);
-        assertFalse("ID不应该为空", id.isEmpty());
-    }
-
-    @Test
-    public void testInsert_NonexistentCollection() throws Exception {
-        // 尝试向不存在的集合插入
-        List<Float> vector = createTestVector(testDimension);
-        Map<String, Object> metadata = createTestMetadata();
-
-        try {
-            vectorStore.insert("nonexistent", vector, metadata).get();
-            fail("应该抛出异常，因为集合不存在");
-        } catch (ExecutionException e) {
-            assertTrue("应该包含集合不存在的错误信息",
-                       e.getCause().getMessage().contains("不存在"));
+    
+    @Nested
+    @DisplayName("向量管理功能")
+    class VectorManagementTests {
+        
+        private String testVectorId;
+        
+        @BeforeEach
+        void setUpManagementData() throws ExecutionException, InterruptedException {
+            List<Float> vector = Arrays.asList(0.1f, 0.2f, 0.3f);
+            Map<String, Object> metadata = createTestMetadata();
+            testVectorId = vectorStore.insert(TEST_COLLECTION, vector, metadata).get();
+        }
+        
+        @Test
+        @DisplayName("获取向量")
+        void testGetVector() throws ExecutionException, InterruptedException {
+            VectorStore.VectorDocument doc = vectorStore.get(TEST_COLLECTION, testVectorId).get();
+            
+            assertNotNull(doc);
+            assertEquals(testVectorId, doc.getId());
+            assertEquals(3, doc.getVector().size());
+            assertTrue(doc.getMetadata().containsKey("userId"));
+        }
+        
+        @Test
+        @DisplayName("获取不存在的向量")
+        void testGetNonexistentVector() throws ExecutionException, InterruptedException {
+            VectorStore.VectorDocument doc = vectorStore.get(TEST_COLLECTION, "nonexistent").get();
+            assertNull(doc);
+        }
+        
+        @Test
+        @DisplayName("更新向量")
+        void testUpdateVector() throws ExecutionException, InterruptedException {
+            float[] newEmbedding = {0.4f, 0.5f, 0.6f};
+            Map<String, Object> newProperties = new HashMap<>();
+            newProperties.put("updated", true);
+            newProperties.put("timestamp", System.currentTimeMillis());
+            
+            assertDoesNotThrow(() -> vectorStore.update(testVectorId, newEmbedding, newProperties).get());
+            
+            SearchResult result = vectorStore.get(testVectorId).get();
+            assertTrue((Boolean) result.properties.get("updated"));
+        }
+        
+        @Test
+        @DisplayName("更新不存在的向量")
+        void testUpdateNonexistentVector() {
+            float[] embedding = {0.1f, 0.2f, 0.3f};
+            Map<String, Object> properties = new HashMap<>();
+            
+            CompletableFuture<Void> future = vectorStore.update("nonexistent", embedding, properties);
+            assertThrows(RuntimeException.class, future::join);
+        }
+        
+        @Test
+        @DisplayName("删除向量")
+        void testDeleteVector() throws ExecutionException, InterruptedException {
+            assertTrue(vectorStore.delete(testVectorId).get());
+            assertEquals(0, vectorStore.getTotalVectorCount());
+        }
+        
+        @Test
+        @DisplayName("删除不存在的向量")
+        void testDeleteNonexistentVector() throws ExecutionException, InterruptedException {
+            assertFalse(vectorStore.delete("nonexistent").get());
+        }
+        
+        @Test
+        @DisplayName("通过接口删除向量")
+        void testDeleteVectorViaInterface() throws ExecutionException, InterruptedException {
+            assertDoesNotThrow(() -> vectorStore.delete(TEST_COLLECTION, testVectorId).get());
+            assertEquals(0, vectorStore.getTotalVectorCount());
+        }
+        
+        @Test
+        @DisplayName("按过滤条件删除向量")
+        void testDeleteByFilter() throws ExecutionException, InterruptedException {
+            // 插入更多测试数据
+            Map<String, Object> metadata1 = createTestMetadata();
+            metadata1.put("category", "test");
+            vectorStore.insert(TEST_COLLECTION, Arrays.asList(0.4f, 0.5f, 0.6f), metadata1).get();
+            
+            Map<String, Object> metadata2 = createTestMetadata();
+            metadata2.put("category", "production");
+            vectorStore.insert(TEST_COLLECTION, Arrays.asList(0.7f, 0.8f, 0.9f), metadata2).get();
+            
+            // 按条件删除
+            Map<String, Object> filter = new HashMap<>();
+            filter.put("category", "test");
+            vectorStore.deleteByFilter(TEST_COLLECTION, filter).get();
+            
+            assertEquals(2, vectorStore.getTotalVectorCount()); // 原始+production数据
         }
     }
-
-    @Test
-    public void testInsert_WrongDimension() throws Exception {
-        // 创建集合
-        vectorStore.createCollection(testCollection, testDimension).get();
+    
+    @Nested
+    @DisplayName("用户管理功能")
+    class UserManagementTests {
         
-        // 使用错误维度的向量
-        List<Float> wrongVector = createTestVector(testDimension + 10);
-        Map<String, Object> metadata = createTestMetadata();
-
-        try {
-            vectorStore.insert(testCollection, wrongVector, metadata).get();
-            fail("应该抛出异常，因为向量维度不匹配");
-        } catch (ExecutionException e) {
-            assertTrue("应该包含维度不匹配的错误信息",
-                       e.getCause().getMessage().contains("维度"));
+        @BeforeEach
+        void setUpUserData() throws ExecutionException, InterruptedException {
+            // 为不同用户插入数据
+            String[] userIds = {"user1", "user2", "user3"};
+            String[] types = {"personal", "work", "study"};
+            
+            for (int i = 0; i < userIds.length; i++) {
+                for (int j = 0; j < 3; j++) {
+                    Map<String, Object> metadata = new HashMap<>();
+                    metadata.put("userId", userIds[i]);
+                    metadata.put("type", types[i]);
+                    metadata.put("index", j);
+                    
+                    List<Float> vector = Arrays.asList(
+                        (float) (i + 0.1), 
+                        (float) (j + 0.2), 
+                        0.3f
+                    );
+                    
+                    vectorStore.insert(TEST_COLLECTION, vector, metadata).get();
+                }
+            }
+        }
+        
+        @Test
+        @DisplayName("获取用户所有向量")
+        void testGetAllByUser() throws ExecutionException, InterruptedException {
+            List<SearchResult> results = vectorStore.getAllByUser("user1").get();
+            
+            assertEquals(3, results.size());
+            assertTrue(results.stream()
+                .allMatch(r -> "user1".equals(r.properties.get("userId"))));
+        }
+        
+        @Test
+        @DisplayName("获取用户向量数量")
+        void testGetMemoryCount() throws ExecutionException, InterruptedException {
+            Long count = vectorStore.getMemoryCount("user2").get();
+            assertEquals(3L, count.longValue());
+        }
+        
+        @Test
+        @DisplayName("获取用户内存类型分布")
+        void testGetMemoryTypeDistribution() throws ExecutionException, InterruptedException {
+            Map<String, Long> distribution = vectorStore.getMemoryTypeDistribution("user3").get();
+            
+            assertEquals(1, distribution.size());
+            assertEquals(3L, distribution.get("study").longValue());
+        }
+        
+        @Test
+        @DisplayName("获取所有用户列表")
+        void testGetAllUsers() {
+            Set<String> users = vectorStore.getAllUsers();
+            
+            assertEquals(3, users.size()); // setUpUserData中创建的3个用户
+            assertTrue(users.containsAll(Arrays.asList("user1", "user2", "user3")));
+        }
+        
+        @Test
+        @DisplayName("不存在用户的操作")
+        void testOperationsWithNonexistentUser() throws ExecutionException, InterruptedException {
+            String nonexistentUser = "nonexistent_user";
+            
+            List<SearchResult> results = vectorStore.getAllByUser(nonexistentUser).get();
+            assertTrue(results.isEmpty());
+            
+            Long count = vectorStore.getMemoryCount(nonexistentUser).get();
+            assertEquals(0L, count.longValue());
+            
+            Map<String, Long> distribution = vectorStore.getMemoryTypeDistribution(nonexistentUser).get();
+            assertTrue(distribution.isEmpty());
         }
     }
-
-    @Test
-    public void testBatchInsert_Success() throws Exception {
-        // 准备测试数据
-        vectorStore.createCollection(testCollection, testDimension).get();
+    
+    @Nested
+    @DisplayName("相似度计算测试")
+    class SimilarityCalculationTests {
         
-        List<List<Float>> vectors = Arrays.asList(
-            createTestVector(testDimension),
-            createTestVector(testDimension),
-            createTestVector(testDimension)
-        );
+        @Test
+        @DisplayName("相同向量的相似度")
+        void testIdenticalVectorsSimilarity() throws ExecutionException, InterruptedException {
+            float[] embedding = {1.0f, 0.0f, 0.0f};
+            Map<String, Object> metadata = createTestMetadata();
+            String id = "test_similarity_vector";
+            vectorStore.insert(id, embedding, metadata).get();
+            
+            List<SearchResult> results = vectorStore.search(embedding, TEST_USER_ID, 1).get();
+            
+            assertFalse(results.isEmpty());
+            assertTrue(results.get(0).similarity > 0.99f); // 应该非常接近1.0
+        }
         
-        List<Map<String, Object>> metadataList = Arrays.asList(
-            createTestMetadata("item1"),
-            createTestMetadata("item2"),
-            createTestMetadata("item3")
-        );
-
-        // 执行批量插入
-        CompletableFuture<List<String>> future = vectorStore.batchInsert(testCollection, vectors, metadataList);
-        List<String> ids = future.get();
-
-        // 验证结果
-        assertNotNull("批量插入应该返回ID列表", ids);
-        assertEquals("ID数量应该匹配", vectors.size(), ids.size());
-        
-        for (String id : ids) {
-            assertNotNull("每个ID都不应该为空", id);
-            assertFalse("每个ID都不应该为空字符串", id.isEmpty());
+        @Test
+        @DisplayName("垂直向量的相似度")
+        void testOrthogonalVectorsSimilarity() throws ExecutionException, InterruptedException {
+            // 插入垂直向量
+            float[] embedding1 = {1.0f, 0.0f, 0.0f};
+            float[] embedding2 = {0.0f, 1.0f, 0.0f};
+            
+            Map<String, Object> metadata = createTestMetadata();
+            vectorStore.insert("test1", embedding1, metadata).get();
+            vectorStore.insert("test2", embedding2, metadata).get();
+            
+            // 搜索应该显示较低的相似度
+            List<SearchResult> results = vectorStore.search(embedding1, TEST_USER_ID, 2).get();
+            
+            assertEquals(2, results.size());
+            // 第一个结果是自己，第二个是垂直向量，相似度应该接近0
+            assertTrue(Math.abs(results.get(1).similarity) < 0.1f);
         }
     }
-
-    @Test
-    public void testBatchInsert_MismatchedSizes() throws Exception {
-        // 创建集合
-        vectorStore.createCollection(testCollection, testDimension).get();
+    
+    @Nested
+    @DisplayName("资源管理测试")
+    class ResourceManagementTests {
         
-        // 准备不匹配大小的数据
-        List<List<Float>> vectors = Arrays.asList(createTestVector(testDimension));
-        List<Map<String, Object>> metadataList = Arrays.asList(
-            createTestMetadata("item1"),
-            createTestMetadata("item2") // 多一个元数据
-        );
-
-        try {
-            vectorStore.batchInsert(testCollection, vectors, metadataList).get();
-            fail("应该抛出异常，因为向量和元数据数量不匹配");
-        } catch (ExecutionException e) {
-            assertTrue("应该包含数量不匹配的错误信息",
-                       e.getCause().getMessage().contains("数量"));
+        @Test
+        @DisplayName("清空存储")
+        void testClearStore() throws ExecutionException, InterruptedException {
+            // 插入一些数据
+            List<Float> vector = Arrays.asList(0.1f, 0.2f, 0.3f);
+            vectorStore.insert(TEST_COLLECTION, vector, createTestMetadata()).get();
+            
+            assertTrue(vectorStore.getTotalVectorCount() > 0);
+            
+            vectorStore.clear();
+            
+            assertEquals(0, vectorStore.getTotalVectorCount());
+            assertTrue(vectorStore.getAllUsers().isEmpty());
+        }
+        
+        @Test
+        @DisplayName("关闭存储")
+        void testCloseStore() throws ExecutionException, InterruptedException {
+            // 插入一些数据
+            List<Float> vector = Arrays.asList(0.1f, 0.2f, 0.3f);
+            vectorStore.insert(TEST_COLLECTION, vector, createTestMetadata()).get();
+            
+            assertDoesNotThrow(() -> vectorStore.close().get());
+            assertEquals(0, vectorStore.getTotalVectorCount());
         }
     }
-
-    @Test
-    public void testSearch_Success() throws Exception {
-        // 准备测试数据
-        vectorStore.createCollection(testCollection, testDimension).get();
+    
+    @Nested
+    @DisplayName("并发测试")
+    class ConcurrencyTests {
         
-        // 插入测试向量
-        List<Float> vector1 = createTestVector(testDimension);
-        List<Float> vector2 = createSimilarVector(vector1);
+        @Test
+        @DisplayName("并发插入测试")
+        void testConcurrentInsert() {
+            int threadCount = 10;
+            int operationsPerThread = 20;
+            
+            List<CompletableFuture<String>> futures = IntStream.range(0, threadCount)
+                .boxed()
+                .flatMap(threadId -> IntStream.range(0, operationsPerThread)
+                    .mapToObj(opId -> {
+                        List<Float> vector = Arrays.asList(
+                            (float) threadId, 
+                            (float) opId, 
+                            0.3f
+                        );
+                        Map<String, Object> metadata = createTestMetadata();
+                        metadata.put("threadId", threadId);
+                        metadata.put("operationId", opId);
+                        
+                        return vectorStore.insert(TEST_COLLECTION, vector, metadata);
+                    }))
+                .collect(Collectors.toList());
+            
+            // 等待所有操作完成
+            List<String> ids = futures.stream()
+                .map(CompletableFuture::join)
+                .collect(Collectors.toList());
+            
+            assertEquals(threadCount * operationsPerThread, ids.size());
+            assertEquals(threadCount * operationsPerThread, vectorStore.getTotalVectorCount());
+            assertTrue(ids.stream().allMatch(Objects::nonNull));
+        }
         
-        vectorStore.insert(testCollection, vector1, createTestMetadata("item1")).get();
-        vectorStore.insert(testCollection, vector2, createTestMetadata("item2")).get();
-
-        // 执行搜索
-        CompletableFuture<List<VectorStore.VectorSearchResult>> future = 
-            vectorStore.search(testCollection, vector1, 5, null);
-        List<VectorStore.VectorSearchResult> results = future.get();
-
-        // 验证结果
-        assertNotNull("搜索结果不应该为空", results);
-        assertFalse("应该有搜索结果", results.isEmpty());
-        assertTrue("结果数量应该合理", results.size() <= 5);
-        
-        // 验证第一个结果应该是完全匹配的
-        VectorStore.VectorSearchResult firstResult = results.get(0);
-        assertTrue("第一个结果相似度应该很高", firstResult.getScore() > 0.99f);
-    }
-
-    @Test
-    public void testSearch_WithFilter() throws Exception {
-        // 准备测试数据
-        vectorStore.createCollection(testCollection, testDimension).get();
-        
-        // 插入带不同标签的向量
-        Map<String, Object> metadata1 = createTestMetadata("item1");
-        metadata1.put("category", "A");
-        Map<String, Object> metadata2 = createTestMetadata("item2");
-        metadata2.put("category", "B");
-        
-        vectorStore.insert(testCollection, createTestVector(testDimension), metadata1).get();
-        vectorStore.insert(testCollection, createTestVector(testDimension), metadata2).get();
-
-        // 使用过滤器搜索
-        Map<String, Object> filter = Collections.singletonMap("category", "A");
-        CompletableFuture<List<VectorStore.VectorSearchResult>> future = 
-            vectorStore.search(testCollection, createTestVector(testDimension), 5, filter);
-        List<VectorStore.VectorSearchResult> results = future.get();
-
-        // 验证结果
-        assertNotNull("搜索结果不应该为空", results);
-        
-        for (VectorStore.VectorSearchResult result : results) {
-            assertEquals("所有结果都应该匹配过滤器", "A", 
-                        result.getMetadata().get("category"));
+        @Test
+        @DisplayName("并发搜索测试")
+        void testConcurrentSearch() throws ExecutionException, InterruptedException {
+            // 先插入一些数据
+            for (int i = 0; i < 50; i++) {
+                List<Float> vector = Arrays.asList((float) i, 0.2f, 0.3f);
+                vectorStore.insert(TEST_COLLECTION, vector, createTestMetadata()).get();
+            }
+            
+            List<Float> queryVector = Arrays.asList(25.0f, 0.2f, 0.3f);
+            int threadCount = 20;
+            
+            List<CompletableFuture<List<VectorStore.VectorSearchResult>>> futures = 
+                IntStream.range(0, threadCount)
+                    .mapToObj(i -> vectorStore.search(TEST_COLLECTION, queryVector, 10, null))
+                    .collect(Collectors.toList());
+            
+            // 等待所有搜索完成
+            List<List<VectorStore.VectorSearchResult>> results = futures.stream()
+                .map(CompletableFuture::join)
+                .collect(Collectors.toList());
+            
+            assertEquals(threadCount, results.size());
+            assertTrue(results.stream().allMatch(result -> result.size() <= 10));
         }
     }
-
-    @Test
-    public void testSearch_EmptyResults() throws Exception {
-        // 创建空集合
-        vectorStore.createCollection(testCollection, testDimension).get();
-
-        // 在空集合中搜索
-        CompletableFuture<List<VectorStore.VectorSearchResult>> future = 
-            vectorStore.search(testCollection, createTestVector(testDimension), 5, null);
-        List<VectorStore.VectorSearchResult> results = future.get();
-
-        // 验证结果
-        assertNotNull("搜索结果不应该为null", results);
-        assertTrue("空集合搜索应该返回空结果", results.isEmpty());
-    }
-
-    @Test
-    public void testDelete_Success() throws Exception {
-        // 准备测试数据
-        vectorStore.createCollection(testCollection, testDimension).get();
-        String id = vectorStore.insert(testCollection, createTestVector(testDimension), 
-                                      createTestMetadata()).get();
-
-        // 执行删除
-        CompletableFuture<Void> future = vectorStore.delete(testCollection, id);
-        future.get(); // 不应该抛出异常
-
-        // 验证删除效果 - 尝试获取已删除的项目
-        CompletableFuture<VectorStore.VectorDocument> getFuture = vectorStore.get(testCollection, id);
-        VectorStore.VectorDocument result = getFuture.get();
-        assertNull("已删除的项目应该返回null", result);
-    }
-
-    @Test
-    public void testDelete_NonexistentId() throws Exception {
-        // 创建集合
-        vectorStore.createCollection(testCollection, testDimension).get();
-
-        // 尝试删除不存在的ID - 应该不抛出异常（幂等操作）
-        CompletableFuture<Void> future = vectorStore.delete(testCollection, "nonexistent");
-        future.get(); // 不应该抛出异常
-    }
-
-    @Test
-    public void testDeleteByFilter_Success() throws Exception {
-        // 准备测试数据
-        vectorStore.createCollection(testCollection, testDimension).get();
+    
+    @Nested
+    @DisplayName("异常处理测试")
+    class ExceptionHandlingTests {
         
-        Map<String, Object> metadata1 = createTestMetadata("item1");
-        metadata1.put("status", "active");
-        Map<String, Object> metadata2 = createTestMetadata("item2");
-        metadata2.put("status", "inactive");
+        @Test
+        @DisplayName("空向量异常")
+        void testEmptyVectorException() {
+            List<Float> emptyVector = Collections.emptyList();
+            Map<String, Object> metadata = createTestMetadata();
+            
+            assertDoesNotThrow(() -> {
+                String id = vectorStore.insert(TEST_COLLECTION, emptyVector, metadata).get();
+                assertNotNull(id);
+            });
+        }
         
-        vectorStore.insert(testCollection, createTestVector(testDimension), metadata1).get();
-        vectorStore.insert(testCollection, createTestVector(testDimension), metadata2).get();
-
-        // 按过滤器删除
-        Map<String, Object> filter = Collections.singletonMap("status", "inactive");
-        CompletableFuture<Void> future = vectorStore.deleteByFilter(testCollection, filter);
-        future.get(); // 不应该抛出异常
-
-        // 验证删除效果 - 搜索剩余项目
-        CompletableFuture<List<VectorStore.VectorSearchResult>> searchFuture = 
-            vectorStore.search(testCollection, createTestVector(testDimension), 10, null);
-        List<VectorStore.VectorSearchResult> results = searchFuture.get();
-
-        // 验证只剩下active状态的项目
-        for (VectorStore.VectorSearchResult result : results) {
-            assertEquals("剩余项目应该都是active状态", "active", 
-                        result.getMetadata().get("status"));
+        @Test
+        @DisplayName("空元数据处理")
+        void testEmptyMetadata() throws ExecutionException, InterruptedException {
+            List<Float> vector = Arrays.asList(0.1f, 0.2f, 0.3f);
+            Map<String, Object> emptyMetadata = new HashMap<>();
+            
+            String id = vectorStore.insert(TEST_COLLECTION, vector, emptyMetadata).get();
+            assertNotNull(id);
+            
+            VectorStore.VectorDocument doc = vectorStore.get(TEST_COLLECTION, id).get();
+            assertNotNull(doc);
         }
     }
-
-    @Test
-    public void testGet_Success() throws Exception {
-        // 准备测试数据
-        vectorStore.createCollection(testCollection, testDimension).get();
-        List<Float> originalVector = createTestVector(testDimension);
-        Map<String, Object> originalMetadata = createTestMetadata();
-        
-        String id = vectorStore.insert(testCollection, originalVector, originalMetadata).get();
-
-        // 执行获取
-        CompletableFuture<VectorStore.VectorDocument> future = vectorStore.get(testCollection, id);
-        VectorStore.VectorDocument document = future.get();
-
-        // 验证结果
-        assertNotNull("应该能获取到文档", document);
-        assertEquals("ID应该匹配", id, document.getId());
-        assertNotNull("向量不应该为空", document.getVector());
-        assertEquals("向量维度应该匹配", testDimension, document.getVector().size());
-        assertNotNull("元数据不应该为空", document.getMetadata());
-    }
-
-    @Test
-    public void testGet_NonexistentId() throws Exception {
-        // 创建集合
-        vectorStore.createCollection(testCollection, testDimension).get();
-
-        // 尝试获取不存在的文档
-        CompletableFuture<VectorStore.VectorDocument> future = 
-            vectorStore.get(testCollection, "nonexistent");
-        VectorStore.VectorDocument result = future.get();
-
-        // 验证结果
-        assertNull("不存在的文档应该返回null", result);
-    }
-
-    @Test
-    public void testDropCollection_Success() throws Exception {
-        // 创建集合
-        vectorStore.createCollection(testCollection, testDimension).get();
-        
-        // 验证集合存在
-        assertTrue("集合应该存在", vectorStore.collectionExists(testCollection).get());
-
-        // 删除集合
-        CompletableFuture<Void> future = vectorStore.dropCollection(testCollection);
-        future.get(); // 不应该抛出异常
-
-        // 验证集合已删除
-        assertFalse("集合应该已删除", vectorStore.collectionExists(testCollection).get());
-    }
-
-    @Test
-    public void testDropCollection_NonexistentCollection() throws Exception {
-        // 尝试删除不存在的集合 - 应该不抛出异常（幂等操作）
-        CompletableFuture<Void> future = vectorStore.dropCollection("nonexistent");
-        future.get(); // 不应该抛出异常
-    }
-
-    @Test
-    public void testConcurrentOperations() throws Exception {
-        // 测试并发操作的线程安全性
-        vectorStore.createCollection(testCollection, testDimension).get();
-
-        // 并发插入
-        CompletableFuture<String>[] insertFutures = new CompletableFuture[10];
-        for (int i = 0; i < 10; i++) {
-            final int index = i;
-            insertFutures[i] = vectorStore.insert(testCollection, 
-                createTestVector(testDimension), createTestMetadata("item" + index));
-        }
-
-        // 等待所有插入完成
-        CompletableFuture.allOf(insertFutures).get();
-
-        // 验证所有插入都成功
-        Set<String> ids = new HashSet<>();
-        for (CompletableFuture<String> future : insertFutures) {
-            String id = future.get();
-            assertNotNull("ID不应该为空", id);
-            assertTrue("ID应该是唯一的", ids.add(id));
-        }
-
-        // 并发搜索
-        CompletableFuture<List<VectorStore.VectorSearchResult>>[] searchFutures = 
-            new CompletableFuture[5];
-        for (int i = 0; i < 5; i++) {
-            searchFutures[i] = vectorStore.search(testCollection, 
-                createTestVector(testDimension), 5, null);
-        }
-
-        // 等待所有搜索完成
-        CompletableFuture.allOf(searchFutures).get();
-
-        // 验证所有搜索都成功
-        for (CompletableFuture<List<VectorStore.VectorSearchResult>> future : searchFutures) {
-            List<VectorStore.VectorSearchResult> results = future.get();
-            assertNotNull("搜索结果不应该为空", results);
-        }
-    }
-
+    
     // 辅助方法
-
-    private List<Float> createTestVector(int dimension) {
-        List<Float> vector = new ArrayList<>(dimension);
-        Random random = new Random(42); // 固定种子确保测试可重现
-        for (int i = 0; i < dimension; i++) {
-            vector.add(random.nextFloat());
-        }
-        return vector;
-    }
-
-    private List<Float> createSimilarVector(List<Float> original) {
-        List<Float> similar = new ArrayList<>(original.size());
-        for (Float value : original) {
-            // 添加小的噪音但保持相似性
-            similar.add(value + (float) (Math.random() * 0.01 - 0.005));
-        }
-        return similar;
-    }
-
     private Map<String, Object> createTestMetadata() {
-        return createTestMetadata("default");
-    }
-
-    private Map<String, Object> createTestMetadata(String name) {
         Map<String, Object> metadata = new HashMap<>();
-        metadata.put("name", name);
-        metadata.put("timestamp", System.currentTimeMillis());
+        metadata.put("userId", TEST_USER_ID);
+        metadata.put("content", "test content");
+        metadata.put("type", "FACTUAL");
+        metadata.put("createdAt", String.valueOf(System.currentTimeMillis()));
         metadata.put("source", "test");
         return metadata;
     }

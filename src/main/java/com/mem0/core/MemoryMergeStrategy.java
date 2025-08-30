@@ -321,9 +321,22 @@ public class MemoryMergeStrategy {
         
         return llmProvider.generateChatCompletion(messages, config)
             .thenApply(response -> {
-                EnhancedMemory updatedMemory = createUpdatedMemory(existingMemory, response.getContent());
-                updatedMemory.getMetadata().put("update_method", "LLM");
-                return updatedMemory;
+                if (response == null) {
+                    logger.warn("LLM response is null, falling back to rules");
+                    return updateWithRules(existingMemory, newContent, updateContext);
+                }
+                if (response.getContent() == null) {
+                    logger.warn("LLM response content is null, falling back to rules");
+                    return updateWithRules(existingMemory, newContent, updateContext);
+                }
+                try {
+                    EnhancedMemory updatedMemory = createUpdatedMemory(existingMemory, response.getContent());
+                    updatedMemory.getMetadata().put("update_method", "LLM");
+                    return updatedMemory;
+                } catch (Exception e) {
+                    logger.error("Error creating updated memory from LLM response: {}", e.getMessage());
+                    return updateWithRules(existingMemory, newContent, updateContext);
+                }
             })
             .exceptionally(throwable -> {
                 logger.warn("LLM update failed, falling back to rules: {}", throwable.getMessage());

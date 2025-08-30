@@ -195,11 +195,19 @@ public class EnhancedMemory {
     }
     
     public long getDaysOld() {
-        return ChronoUnit.DAYS.between(createdAt, LocalDateTime.now());
+        if (createdAt == null) {
+            return 0;
+        }
+        long days = ChronoUnit.DAYS.between(createdAt, LocalDateTime.now());
+        return Math.max(0, days); // Ensure non-negative
     }
     
     public long getDaysSinceLastAccess() {
-        return ChronoUnit.DAYS.between(lastAccessedAt, LocalDateTime.now());
+        if (lastAccessedAt == null) {
+            return 0;
+        }
+        long days = ChronoUnit.DAYS.between(lastAccessedAt, LocalDateTime.now());
+        return Math.max(0, days); // Ensure non-negative
     }
     
     public void setTTL(long days) {
@@ -259,10 +267,18 @@ public class EnhancedMemory {
     }
     
     private String generateContentHash(String content) {
+        if (content == null) {
+            return "null-content";
+        }
         return String.valueOf(content.hashCode());
     }
     
     private double calculateTextSimilarity(String text1, String text2) {
+        // Handle null inputs
+        if (text1 == null || text2 == null) {
+            return 0.0;
+        }
+        
         // Simple Jaccard similarity as placeholder
         Set<String> words1 = new HashSet<>(Arrays.asList(text1.toLowerCase().split("\\s+")));
         Set<String> words2 = new HashSet<>(Arrays.asList(text2.toLowerCase().split("\\s+")));
@@ -336,10 +352,11 @@ public class EnhancedMemory {
     
     @Override
     public String toString() {
+        String contentPreview = content != null ? 
+            (content.length() > 50 ? content.substring(0, 50) + "..." : content) : "null";
         return String.format("EnhancedMemory{id='%s', type=%s, importance=%s, content='%s', " +
                 "accessCount=%d, age=%d days, relevanceScore=%.3f}",
-                id, type, importance, 
-                content.length() > 50 ? content.substring(0, 50) + "..." : content,
+                id, type, importance, contentPreview,
                 accessCount, getDaysOld(), relevanceScore);
     }
     

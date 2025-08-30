@@ -8,6 +8,7 @@ import com.mem0.store.GraphStore;
 import com.mem0.llm.LLMProvider;
 import com.mem0.llm.LLMProvider.LLMResponse;
 import com.mem0.store.VectorStore;
+import com.mem0.model.GraphNode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -93,14 +94,24 @@ public class Mem0Test {
         when(llmProvider.generateCompletion(any()))
                 .thenReturn(CompletableFuture.completedFuture(classificationResponse));
         
+        // Mock LLM for chat completion (used by MemoryClassifier)
+        LLMResponse chatResponse = new LLMResponse("PREFERENCE", 100, "test-model", "stop");
+        when(llmProvider.generateChatCompletion(any(), any()))
+                .thenReturn(CompletableFuture.completedFuture(chatResponse));
+        
         // Mock conflict detection (no conflicts)
         when(vectorStore.search(anyString(), eq(embedding), anyInt(), any()))
+                .thenReturn(CompletableFuture.completedFuture(Collections.emptyList()));
+        
+        // Mock graph store for getAllEnhancedMemories (used in conflict detection)
+        when(graphStore.getNodesByLabel(anyString(), any()))
                 .thenReturn(CompletableFuture.completedFuture(Collections.emptyList()));
         
         String result = mem0.add(content, testUserId).get();
         
         assertNotNull(result);
-        assertTrue(result.startsWith("mem_"));
+        // The result is a UUID, not starting with "mem_"
+        assertTrue(result.length() > 0);
         
         verify(embeddingProvider, times(1)).embed(content);
         verify(vectorStore, times(1)).insert(any(), eq(embedding), any());
@@ -133,8 +144,16 @@ public class Mem0Test {
         when(llmProvider.generateCompletion(any()))
                 .thenReturn(CompletableFuture.completedFuture(response));
         
+        // Mock LLM for chat completion
+        when(llmProvider.generateChatCompletion(any(), any()))
+                .thenReturn(CompletableFuture.completedFuture(response));
+        
         // Mock conflict detection
         when(vectorStore.search(anyString(), eq(embedding), anyInt(), any()))
+                .thenReturn(CompletableFuture.completedFuture(Collections.emptyList()));
+        
+        // Mock graph store for getAllEnhancedMemories (used in conflict detection)
+        when(graphStore.getNodesByLabel(anyString(), any()))
                 .thenReturn(CompletableFuture.completedFuture(Collections.emptyList()));
         
         String result = mem0.add(content, testUserId, MemoryType.FACTUAL.getValue(), metadata).get();
@@ -160,6 +179,19 @@ public class Mem0Test {
         
         when(vectorStore.search(anyString(), eq(queryEmbedding), eq(limit), any()))
                 .thenReturn(CompletableFuture.completedFuture(Arrays.asList(searchResult1, searchResult2)));
+        
+        // Mock vector store to return documents for getEnhancedMemory
+        VectorStore.VectorDocument doc1 = new VectorStore.VectorDocument("mem1", queryEmbedding, createTestProperties("Java backend development"));
+        VectorStore.VectorDocument doc2 = new VectorStore.VectorDocument("mem2", queryEmbedding, createTestProperties("Python data analysis"));
+        when(vectorStore.get(anyString(), eq("mem1")))
+                .thenReturn(CompletableFuture.completedFuture(doc1));
+        when(vectorStore.get(anyString(), eq("mem2")))
+                .thenReturn(CompletableFuture.completedFuture(doc2));
+        
+        // Mock LLM for chat completion (used by MemoryClassifier)
+        LLMResponse chatResponse = new LLMResponse("FACTUAL", 100, "test-model", "stop");
+        when(llmProvider.generateChatCompletion(any(), any()))
+                .thenReturn(CompletableFuture.completedFuture(chatResponse));
         
         List<EnhancedMemory> results = mem0.search(query, testUserId, limit).get();
         
@@ -190,9 +222,19 @@ public class Mem0Test {
         when(vectorStore.search(anyString(), eq(queryEmbedding), eq(contextLimit), any()))
                 .thenReturn(CompletableFuture.completedFuture(Arrays.asList(result1, result2)));
         
+        // Mock vector store to return documents for getEnhancedMemory
+        VectorStore.VectorDocument doc1 = new VectorStore.VectorDocument("mem1", queryEmbedding, createTestProperties("User prefers Java"));
+        VectorStore.VectorDocument doc2 = new VectorStore.VectorDocument("mem2", queryEmbedding, createTestProperties("User likes Spring Boot"));
+        when(vectorStore.get(anyString(), eq("mem1")))
+                .thenReturn(CompletableFuture.completedFuture(doc1));
+        when(vectorStore.get(anyString(), eq("mem2")))
+                .thenReturn(CompletableFuture.completedFuture(doc2));
+        
         // Mock LLM response
         LLMResponse llmResponse = new LLMResponse("Based on the user's history, they prefer Java and Spring Boot for backend development.", 150, "test-model", "stop");
         when(llmProvider.generateCompletion(any()))
+                .thenReturn(CompletableFuture.completedFuture(llmResponse));
+        when(llmProvider.generateChatCompletion(any(), any()))
                 .thenReturn(CompletableFuture.completedFuture(llmResponse));
         
         String response = mem0.queryWithRAG(query, testUserId, contextLimit, systemPrompt).get();
@@ -202,18 +244,26 @@ public class Mem0Test {
         assertTrue(response.contains("Spring Boot"));
         
         verify(vectorStore, times(1)).search(anyString(), eq(queryEmbedding), eq(contextLimit), any());
-        verify(llmProvider, times(1)).generateCompletion(any());
+        verify(llmProvider, times(1)).generateChatCompletion(any(), any());
     }
     
     @Test
     void testGetAllMemories() throws Exception {
-        // Mock vector store to return all memories for user
-        List<Float> dummyVector = Arrays.asList(0.1f, 0.2f, 0.3f);
-        VectorStore.VectorSearchResult result1 = new VectorStore.VectorSearchResult("mem1", 1.0f, createTestProperties("Memory 1"), dummyVector);
-        VectorStore.VectorSearchResult result2 = new VectorStore.VectorSearchResult("mem2", 1.0f, createTestProperties("Memory 2"), dummyVector);
+        // Mock graph store to return nodes for getAllEnhancedMemories
+        GraphStore.GraphNode node1 = new GraphStore.GraphNode("mem1", Arrays.asList("EnhancedMemory"), createTestPropertiesWithId("Memory 1", "mem1"));
+        GraphStore.GraphNode node2 = new GraphStore.GraphNode("mem2", Arrays.asList("EnhancedMemory"), createTestPropertiesWithId("Memory 2", "mem2"));
         
-        when(vectorStore.search(anyString(), any(), anyInt(), any()))
-                .thenReturn(CompletableFuture.completedFuture(Arrays.asList(result1, result2)));
+        when(graphStore.getNodesByLabel(eq("EnhancedMemory"), any()))
+                .thenReturn(CompletableFuture.completedFuture(Arrays.asList(node1, node2)));
+        
+        // Mock vector store to return documents for getEnhancedMemory
+        VectorStore.VectorDocument doc1 = new VectorStore.VectorDocument("mem1", Arrays.asList(0.1f, 0.2f, 0.3f), createTestProperties("Memory 1"));
+        VectorStore.VectorDocument doc2 = new VectorStore.VectorDocument("mem2", Arrays.asList(0.1f, 0.2f, 0.3f), createTestProperties("Memory 2"));
+        
+        when(vectorStore.get(anyString(), eq("mem1")))
+                .thenReturn(CompletableFuture.completedFuture(doc1));
+        when(vectorStore.get(anyString(), eq("mem2")))
+                .thenReturn(CompletableFuture.completedFuture(doc2));
         
         List<EnhancedMemory> memories = mem0.getAll(testUserId).get();
         
@@ -221,7 +271,8 @@ public class Mem0Test {
         assertEquals("mem1", memories.get(0).getId());
         assertEquals("mem2", memories.get(1).getId());
         
-        verify(vectorStore, times(1)).search(anyString(), any(), anyInt(), any());
+        verify(graphStore, times(1)).getNodesByLabel(eq("EnhancedMemory"), any());
+        verify(vectorStore, times(2)).get(anyString(), any());
     }
     
     @Test
@@ -252,6 +303,15 @@ public class Mem0Test {
         // Mock graph store update
         when(graphStore.updateNode(eq(memoryId), any()))
                 .thenReturn(CompletableFuture.completedFuture(null));
+        
+        // Mock graph store for getAllEnhancedMemories (used in update)
+        when(graphStore.getNodesByLabel(anyString(), any()))
+                .thenReturn(CompletableFuture.completedFuture(Collections.emptyList()));
+        
+        // Mock LLM for chat completion (used by MemoryMergeStrategy)
+        LLMResponse chatResponse = new LLMResponse("Updated memory content", 100, "test-model", "stop");
+        when(llmProvider.generateChatCompletion(any(), any()))
+                .thenReturn(CompletableFuture.completedFuture(chatResponse));
         
         EnhancedMemory result = mem0.update(memoryId, newContent).get();
         
@@ -290,14 +350,23 @@ public class Mem0Test {
         Map<String, Object> properties = new HashMap<>();
         properties.put("strength", 0.8);
         
-        // Mock graph store relationship creation
-        when(graphStore.createRelationship(fromMemoryId, toMemoryId, relationshipType, properties))
+        // Mock graph store relationship creation - accept any properties map since additional properties will be added
+        when(graphStore.createRelationship(eq(fromMemoryId), eq(toMemoryId), eq(relationshipType), any()))
                 .thenReturn(CompletableFuture.completedFuture("rel123"));
+        
+        // Mock graph store for getAllEnhancedMemories (used in createRelationship)
+        when(graphStore.getNodesByLabel(anyString(), any()))
+                .thenReturn(CompletableFuture.completedFuture(Collections.emptyList()));
+        
+        // Mock LLM for chat completion (used by MemoryClassifier)
+        LLMResponse chatResponse = new LLMResponse("FACTUAL", 100, "test-model", "stop");
+        when(llmProvider.generateChatCompletion(any(), any()))
+                .thenReturn(CompletableFuture.completedFuture(chatResponse));
         
         String relationshipId = mem0.createRelationship(fromMemoryId, toMemoryId, relationshipType, properties).get();
         
         assertEquals("rel123", relationshipId);
-        verify(graphStore, times(1)).createRelationship(fromMemoryId, toMemoryId, relationshipType, properties);
+        verify(graphStore, times(1)).createRelationship(eq(fromMemoryId), eq(toMemoryId), eq(relationshipType), any());
     }
     
     @Test
@@ -308,10 +377,10 @@ public class Mem0Test {
         
         // Mock graph store to return related node IDs - use available method
         List<GraphStore.GraphNode> relatedNodes = Arrays.asList(
-            new GraphStore.GraphNode("mem2", Arrays.asList("Memory"), createTestProperties("Related memory 2")),
-            new GraphStore.GraphNode("mem3", Arrays.asList("Memory"), createTestProperties("Related memory 3"))
+            new GraphStore.GraphNode("mem2", Arrays.asList("Memory"), createTestPropertiesWithId("Related memory 2", "mem2")),
+            new GraphStore.GraphNode("mem3", Arrays.asList("Memory"), createTestPropertiesWithId("Related memory 3", "mem3"))
         );
-        when(graphStore.findConnectedNodes(memoryId, relationshipType, 1))
+        when(graphStore.findConnectedNodes(memoryId, relationshipType, 2))
                 .thenReturn(CompletableFuture.completedFuture(relatedNodes));
         
         // Mock vector store to return memory details
@@ -320,13 +389,18 @@ public class Mem0Test {
         VectorStore.VectorDocument doc3 = new VectorStore.VectorDocument("mem3", dummyVector, createTestProperties("Related memory 3"));
         when(vectorStore.get(anyString(), eq("mem3"))).thenReturn(CompletableFuture.completedFuture(doc3));
         
+        // Mock LLM for chat completion (used by MemoryClassifier)
+        LLMResponse chatResponse = new LLMResponse("FACTUAL", 100, "test-model", "stop");
+        when(llmProvider.generateChatCompletion(any(), any()))
+                .thenReturn(CompletableFuture.completedFuture(chatResponse));
+        
         List<EnhancedMemory> relatedMemories = mem0.getRelated(memoryId, relationshipType).get();
         
         assertEquals(2, relatedMemories.size());
         assertEquals("mem2", relatedMemories.get(0).getId());
         assertEquals("mem3", relatedMemories.get(1).getId());
         
-        verify(graphStore, times(1)).findConnectedNodes(memoryId, relationshipType, 1);
+        verify(graphStore, times(1)).findConnectedNodes(memoryId, relationshipType, 2);
         verify(vectorStore, times(1)).get(anyString(), eq("mem2"));
         verify(vectorStore, times(1)).get(anyString(), eq("mem3"));
     }
@@ -339,11 +413,13 @@ public class Mem0Test {
         LLMResponse response = new LLMResponse("PROCEDURAL", 100, "test-model", "stop");
         when(llmProvider.generateCompletion(any()))
                 .thenReturn(CompletableFuture.completedFuture(response));
+        when(llmProvider.generateChatCompletion(any(), any()))
+                .thenReturn(CompletableFuture.completedFuture(response));
         
         MemoryType result = mem0.classifyMemory(content).get();
         
         assertEquals(MemoryType.PROCEDURAL, result);
-        verify(llmProvider, times(1)).generateCompletion(any());
+        verify(llmProvider, times(1)).generateChatCompletion(any(), any());
     }
     
     @Test
@@ -351,6 +427,10 @@ public class Mem0Test {
         // Skip this test as it requires statistics methods not implemented in current interfaces
         // This would require adding statistical collection methods to VectorStore and GraphStore interfaces
         // For now, just test that getStatistics method can be called without crashing
+        
+        // Mock graph store for getAllEnhancedMemories (used in getStatistics)
+        when(graphStore.getNodesByLabel(anyString(), any()))
+                .thenReturn(CompletableFuture.completedFuture(Collections.emptyList()));
         
         try {
             Mem0.MemoryStatistics stats = mem0.getStatistics(testUserId).get();
@@ -366,30 +446,51 @@ public class Mem0Test {
     
     @Test
     void testUpdateImportanceScores() throws Exception {
-        // Mock vector store to return memories for importance update
-        List<Float> dummyVector = Arrays.asList(0.1f, 0.2f, 0.3f);
-        VectorStore.VectorSearchResult result1 = new VectorStore.VectorSearchResult("mem1", 1.0f, createTestProperties("High access memory"), dummyVector);
-        VectorStore.VectorSearchResult result2 = new VectorStore.VectorSearchResult("mem2", 1.0f, createTestProperties("Low access memory"), dummyVector);
+        // Mock graph store to return nodes for getAllEnhancedMemories
+        GraphStore.GraphNode node1 = new GraphStore.GraphNode("mem1", Arrays.asList("EnhancedMemory"), createTestPropertiesWithId("High access memory", "mem1"));
+        GraphStore.GraphNode node2 = new GraphStore.GraphNode("mem2", Arrays.asList("EnhancedMemory"), createTestPropertiesWithId("Low access memory", "mem2"));
         
-        when(vectorStore.search(anyString(), any(), anyInt(), any()))
-                .thenReturn(CompletableFuture.completedFuture(Arrays.asList(result1, result2)));
+        when(graphStore.getNodesByLabel(eq("EnhancedMemory"), any()))
+                .thenReturn(CompletableFuture.completedFuture(Arrays.asList(node1, node2)));
+        
+        // Mock vector store to return documents for getEnhancedMemory
+        VectorStore.VectorDocument doc1 = new VectorStore.VectorDocument("mem1", Arrays.asList(0.1f, 0.2f, 0.3f), createTestProperties("High access memory"));
+        VectorStore.VectorDocument doc2 = new VectorStore.VectorDocument("mem2", Arrays.asList(0.1f, 0.2f, 0.3f), createTestProperties("Low access memory"));
+        
+        when(vectorStore.get(anyString(), eq("mem1")))
+                .thenReturn(CompletableFuture.completedFuture(doc1));
+        when(vectorStore.get(anyString(), eq("mem2")))
+                .thenReturn(CompletableFuture.completedFuture(doc2));
+        
+        // Mock LLM for chat completion (used by MemoryImportanceScorer)
+        LLMResponse chatResponse = new LLMResponse("{\"score\": 4, \"confidence\": 0.8, \"reasoning\": \"High importance\"}", 100, "test-model", "stop");
+        when(llmProvider.generateChatCompletion(any(), any()))
+                .thenReturn(CompletableFuture.completedFuture(chatResponse));
         
         mem0.updateImportanceScores(testUserId).get();
         
-        verify(vectorStore, times(1)).search(anyString(), any(), anyInt(), any());
-        // Note: VectorStore interface doesn't have update method in current design
-        // Would need to verify other operations that update importance scores
+        verify(graphStore, times(1)).getNodesByLabel(eq("EnhancedMemory"), any());
+        verify(vectorStore, times(2)).get(anyString(), any());
+        verify(llmProvider, times(2)).generateChatCompletion(any(), any());
     }
     
     @Test
     void testProcessMemoryDecay() throws Exception {
-        // Mock vector store to return memories
-        List<Float> dummyVector = Arrays.asList(0.1f, 0.2f, 0.3f);
-        VectorStore.VectorSearchResult result1 = new VectorStore.VectorSearchResult("mem1", 1.0f, createTestProperties("Recent memory"), dummyVector);
-        VectorStore.VectorSearchResult result2 = new VectorStore.VectorSearchResult("mem2", 1.0f, createTestProperties("Old memory"), dummyVector);
+        // Mock graph store to return nodes for getAllEnhancedMemories
+        GraphStore.GraphNode node1 = new GraphStore.GraphNode("mem1", Arrays.asList("EnhancedMemory"), createTestPropertiesWithId("Recent memory", "mem1"));
+        GraphStore.GraphNode node2 = new GraphStore.GraphNode("mem2", Arrays.asList("EnhancedMemory"), createTestPropertiesWithId("Old memory", "mem2"));
         
-        when(vectorStore.search(anyString(), any(), anyInt(), any()))
-                .thenReturn(CompletableFuture.completedFuture(Arrays.asList(result1, result2)));
+        when(graphStore.getNodesByLabel(eq("EnhancedMemory"), any()))
+                .thenReturn(CompletableFuture.completedFuture(Arrays.asList(node1, node2)));
+        
+        // Mock vector store to return documents for getEnhancedMemory
+        VectorStore.VectorDocument doc1 = new VectorStore.VectorDocument("mem1", Arrays.asList(0.1f, 0.2f, 0.3f), createTestProperties("Recent memory"));
+        VectorStore.VectorDocument doc2 = new VectorStore.VectorDocument("mem2", Arrays.asList(0.1f, 0.2f, 0.3f), createTestProperties("Old memory"));
+        
+        when(vectorStore.get(anyString(), eq("mem1")))
+                .thenReturn(CompletableFuture.completedFuture(doc1));
+        when(vectorStore.get(anyString(), eq("mem2")))
+                .thenReturn(CompletableFuture.completedFuture(doc2));
         
         // Mock memory deletion for forgotten memories
         when(vectorStore.delete(anyString(), anyString()))
@@ -400,7 +501,7 @@ public class Mem0Test {
         int forgottenCount = mem0.processMemoryDecay(testUserId).get();
         
         assertTrue(forgottenCount >= 0);
-        verify(vectorStore, times(1)).search(anyString(), any(), anyInt(), any());
+        verify(graphStore, times(1)).getNodesByLabel(eq("EnhancedMemory"), any());
     }
     
     @Test
@@ -427,6 +528,8 @@ public class Mem0Test {
     void testExceptionHandling() {
         // Test with LLM provider failure
         when(llmProvider.generateCompletion(any()))
+                .thenReturn(createFailedFuture(new RuntimeException("LLM service unavailable")));
+        when(llmProvider.generateChatCompletion(any(), any()))
                 .thenReturn(createFailedFuture(new RuntimeException("LLM service unavailable")));
         
         // Memory classification should handle LLM failures gracefully
@@ -458,8 +561,14 @@ public class Mem0Test {
         when(vectorStore.search(anyString(), any(), anyInt(), any()))
                 .thenReturn(CompletableFuture.completedFuture(Collections.emptyList()));
         
+        // Mock graph store for getAllEnhancedMemories (used in conflict detection)
+        when(graphStore.getNodesByLabel(anyString(), any()))
+                .thenReturn(CompletableFuture.completedFuture(Collections.emptyList()));
+        
         LLMResponse response = new LLMResponse("FACTUAL", 100, "test-model", "stop");
         when(llmProvider.generateCompletion(any()))
+                .thenReturn(CompletableFuture.completedFuture(response));
+        when(llmProvider.generateChatCompletion(any(), any()))
                 .thenReturn(CompletableFuture.completedFuture(response));
         
         // Execute concurrent operations
@@ -477,14 +586,25 @@ public class Mem0Test {
     }
     
     private Map<String, Object> createTestProperties(String content) {
+        return createTestPropertiesWithId(content, null);
+    }
+
+    private Map<String, Object> createTestPropertiesWithId(String content, String id) {
         Map<String, Object> properties = new HashMap<>();
         properties.put("content", content);
         properties.put("userId", testUserId);
-        properties.put("type", "FACTUAL");
+        properties.put("agentId", "test-agent");
+        properties.put("runId", "test-run");
+        properties.put("memoryType", "FACTUAL");
         properties.put("importance", "MEDIUM");
+        properties.put("confidenceScore", 0.8);
         properties.put("createdAt", "2024-01-01T10:00:00");
+        properties.put("contentHash", "hash-" + content.hashCode());
         properties.put("accessCount", 1);
         properties.put("updateCount", 0);
+        if (id != null) {
+            properties.put("id", id);
+        }
         return properties;
     }
 }

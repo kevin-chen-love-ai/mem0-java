@@ -1,5 +1,6 @@
 package com.mem0.store;
 
+import com.mem0.core.EnhancedMemory;
 import org.neo4j.driver.*;
 import org.neo4j.driver.types.Node;
 import org.neo4j.driver.types.Relationship;
@@ -468,5 +469,200 @@ public class Neo4jGraphStore implements GraphStore {
         }
         
         return new GraphRelationship(id, type, sourceId, targetId, properties);
+    }
+    
+    // Memory-specific methods implementation for Neo4j
+    
+    @Override
+    public CompletableFuture<Void> addMemory(EnhancedMemory memory) {
+        return CompletableFuture.runAsync(() -> {
+            try (Session session = driver.session()) {
+                Map<String, Object> properties = new HashMap<>();
+                properties.put("id", memory.getId());
+                properties.put("content", memory.getContent());
+                properties.put("userId", memory.getUserId());
+                properties.put("createdAt", memory.getCreatedAt().toString());
+                if (memory.getUpdatedAt() != null) {
+                    properties.put("updatedAt", memory.getUpdatedAt().toString());
+                }
+                
+                String cypher = "CREATE (m:Memory {id: $id, content: $content, userId: $userId, createdAt: $createdAt" +
+                              (properties.containsKey("updatedAt") ? ", updatedAt: $updatedAt" : "") + "})";
+                
+                session.run(cypher, properties).consume();
+                logger.debug("Added memory with id: {}", memory.getId());
+            } catch (Exception e) {
+                throw new CompletionException("Failed to add memory", e);
+            }
+        });
+    }
+    
+    @Override
+    public CompletableFuture<EnhancedMemory> getMemory(String memoryId) {
+        return CompletableFuture.supplyAsync(() -> {
+            try (Session session = driver.session()) {
+                Result result = session.run("MATCH (m:Memory {id: $memoryId}) RETURN m", 
+                                           Values.parameters("memoryId", memoryId));
+                
+                if (result.hasNext()) {
+                    Node node = result.next().get("m").asNode();
+                    return convertToEnhancedMemory(node);
+                }
+                return null;
+            } catch (Exception e) {
+                throw new CompletionException("Failed to get memory", e);
+            }
+        });
+    }
+    
+    @Override
+    public CompletableFuture<Void> updateMemory(EnhancedMemory memory) {
+        return CompletableFuture.runAsync(() -> {
+            try (Session session = driver.session()) {
+                Map<String, Object> properties = new HashMap<>();
+                properties.put("memoryId", memory.getId());
+                properties.put("content", memory.getContent());
+                properties.put("updatedAt", memory.getUpdatedAt() != null ? 
+                              memory.getUpdatedAt().toString() : java.time.Instant.now().toString());
+                
+                String cypher = "MATCH (m:Memory {id: $memoryId}) SET m.content = $content, m.updatedAt = $updatedAt";
+                session.run(cypher, properties).consume();
+                logger.debug("Updated memory with id: {}", memory.getId());
+            } catch (Exception e) {
+                throw new CompletionException("Failed to update memory", e);
+            }
+        });
+    }
+    
+    @Override
+    public CompletableFuture<Void> deleteMemory(String memoryId) {
+        return CompletableFuture.runAsync(() -> {
+            try (Session session = driver.session()) {
+                session.run("MATCH (m:Memory {id: $memoryId}) DETACH DELETE m", 
+                          Values.parameters("memoryId", memoryId)).consume();
+                logger.debug("Deleted memory with id: {}", memoryId);
+            } catch (Exception e) {
+                throw new CompletionException("Failed to delete memory", e);
+            }
+        });
+    }
+    
+    @Override
+    public CompletableFuture<List<EnhancedMemory>> getUserMemories(String userId) {
+        return CompletableFuture.supplyAsync(() -> {
+            try (Session session = driver.session()) {
+                Result result = session.run("MATCH (m:Memory {userId: $userId}) RETURN m ORDER BY m.createdAt", 
+                                           Values.parameters("userId", userId));
+                
+                List<EnhancedMemory> memories = new ArrayList<>();
+                while (result.hasNext()) {
+                    Node node = result.next().get("m").asNode();
+                    memories.add(convertToEnhancedMemory(node));
+                }
+                return memories;
+            } catch (Exception e) {
+                throw new CompletionException("Failed to get user memories", e);
+            }
+        });
+    }
+    
+    @Override
+    public CompletableFuture<List<EnhancedMemory>> getMemoryHistory(String userId) {
+        return CompletableFuture.supplyAsync(() -> {
+            try (Session session = driver.session()) {
+                Result result = session.run("MATCH (m:Memory {userId: $userId}) RETURN m ORDER BY m.createdAt ASC", 
+                                           Values.parameters("userId", userId));
+                
+                List<EnhancedMemory> memories = new ArrayList<>();
+                while (result.hasNext()) {
+                    Node node = result.next().get("m").asNode();
+                    memories.add(convertToEnhancedMemory(node));
+                }
+                return memories;
+            } catch (Exception e) {
+                throw new CompletionException("Failed to get memory history", e);
+            }
+        });
+    }
+    
+    @Override
+    public CompletableFuture<List<EnhancedMemory>> searchMemories(String query, String userId, int limit) {
+        return CompletableFuture.supplyAsync(() -> {
+            try (Session session = driver.session()) {
+                Result result = session.run("MATCH (m:Memory {userId: $userId}) " +
+                                           "WHERE toLower(m.content) CONTAINS toLower($query) " +
+                                           "RETURN m ORDER BY m.createdAt DESC LIMIT $limit", 
+                                           Values.parameters("userId", userId, "query", query, "limit", limit));
+                
+                List<EnhancedMemory> memories = new ArrayList<>();
+                while (result.hasNext()) {
+                    Node node = result.next().get("m").asNode();
+                    memories.add(convertToEnhancedMemory(node));
+                }
+                return memories;
+            } catch (Exception e) {
+                throw new CompletionException("Failed to search memories", e);
+            }
+        });
+    }
+    
+    @Override
+    public CompletableFuture<Void> addRelationship(String fromMemoryId, String toMemoryId, 
+                                                  String relationshipType, Map<String, Object> properties) {
+        return CompletableFuture.runAsync(() -> {
+            try (Session session = driver.session()) {
+                Map<String, Object> params = new HashMap<>(properties != null ? properties : new HashMap<>());
+                params.put("fromId", fromMemoryId);
+                params.put("toId", toMemoryId);
+                params.put("id", UUID.randomUUID().toString());
+                
+                StringBuilder cypher = new StringBuilder(
+                    "MATCH (from:Memory {id: $fromId}), (to:Memory {id: $toId}) " +
+                    "CREATE (from)-[r:" + relationshipType + " {"
+                );
+                
+                List<String> propertyAssignments = new ArrayList<>();
+                propertyAssignments.add("id: $id");
+                if (properties != null) {
+                    for (String key : properties.keySet()) {
+                        if (!key.equals("fromId") && !key.equals("toId") && !key.equals("id")) {
+                            propertyAssignments.add(key + ": $" + key);
+                        }
+                    }
+                }
+                
+                cypher.append(String.join(", ", propertyAssignments));
+                cypher.append("}]->(to)");
+                
+                session.run(cypher.toString(), params).consume();
+                logger.debug("Added relationship between memories: {} -> {}", fromMemoryId, toMemoryId);
+            } catch (Exception e) {
+                throw new CompletionException("Failed to add memory relationship", e);
+            }
+        });
+    }
+    
+    private EnhancedMemory convertToEnhancedMemory(Node node) {
+        String id = node.get("id").asString();
+        String content = node.get("content").asString();
+        String userId = node.get("userId").asString();
+        
+        // Create the basic EnhancedMemory object
+        EnhancedMemory memory = new EnhancedMemory(id, content, userId);
+        
+        // Set timestamps if available (they should be set automatically in the constructor)
+        try {
+            if (node.containsKey("createdAt")) {
+                // The timestamps are managed internally by EnhancedMemory
+                // We can't directly set them from the constructor we're using
+            }
+            if (node.containsKey("updatedAt")) {
+                // Similarly for updatedAt
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to parse timestamps for memory: {}", id, e);
+        }
+        
+        return memory;
     }
 }

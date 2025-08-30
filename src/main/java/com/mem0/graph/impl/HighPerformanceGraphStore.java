@@ -1,5 +1,6 @@
 package com.mem0.graph.impl;
 
+import com.mem0.core.EnhancedMemory;
 import com.mem0.store.GraphStore;
 import com.mem0.store.GraphStore.GraphNode;
 import com.mem0.store.GraphStore.GraphRelationship;
@@ -20,6 +21,11 @@ public class HighPerformanceGraphStore implements GraphStore {
     private final Map<String, MemoryNode> nodes = new ConcurrentHashMap<>();
     private final Map<String, Relationship> relationships = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> userNodes = new ConcurrentHashMap<>();
+    
+    // Memory-specific storage
+    private final Map<String, EnhancedMemory> memories = new ConcurrentHashMap<>();
+    private final Map<String, Set<String>> userMemories = new ConcurrentHashMap<>();
+    private final Map<String, Set<String>> memoryRelationships = new ConcurrentHashMap<>();
     
     // 简化版本缓存
     private final Map<String, Map<String, Object>> nodeCache = new ConcurrentHashMap<>();
@@ -791,5 +797,181 @@ public class HighPerformanceGraphStore implements GraphStore {
             return String.format("GraphStoreStats{节点=%d, 关系=%d, 用户=%d, 节点操作=%d, 关系操作=%d, 查询=%d}",
                 totalNodes, totalRelationships, totalUsers, totalNodeOperations, totalRelationshipOperations, totalQueries);
         }
+    }
+    
+    // Memory-specific methods implementation
+    
+    @Override
+    public CompletableFuture<Void> addMemory(EnhancedMemory memory) {
+        return CompletableFuture.supplyAsync(() -> {
+            if (memory == null) {
+                throw new IllegalArgumentException("Memory cannot be null");
+            }
+            
+            String memoryId = memory.getId();
+            if (memories.containsKey(memoryId)) {
+                throw new IllegalArgumentException("Memory with ID " + memoryId + " already exists");
+            }
+            
+            try {
+                memories.put(memoryId, memory);
+                
+                // Add to user memories index
+                String userId = memory.getUserId();
+                userMemories.computeIfAbsent(userId, k -> ConcurrentHashMap.newKeySet()).add(memoryId);
+                
+                totalNodeOperations++;
+                System.out.println("高性能GraphStore: 内存添加成功 " + memoryId);
+                return null;
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to add memory", e);
+            }
+        });
+    }
+    
+    @Override
+    public CompletableFuture<EnhancedMemory> getMemory(String memoryId) {
+        return CompletableFuture.supplyAsync(() -> {
+            totalQueries++;
+            return memories.get(memoryId);
+        });
+    }
+    
+    @Override
+    public CompletableFuture<Void> updateMemory(EnhancedMemory memory) {
+        return CompletableFuture.supplyAsync(() -> {
+            if (memory == null) {
+                throw new IllegalArgumentException("Memory cannot be null");
+            }
+            
+            String memoryId = memory.getId();
+            if (!memories.containsKey(memoryId)) {
+                throw new IllegalArgumentException("Memory with ID " + memoryId + " does not exist");
+            }
+            
+            try {
+                memories.put(memoryId, memory);
+                totalNodeOperations++;
+                System.out.println("高性能GraphStore: 内存更新成功 " + memoryId);
+                return null;
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to update memory", e);
+            }
+        });
+    }
+    
+    @Override
+    public CompletableFuture<Void> deleteMemory(String memoryId) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                EnhancedMemory memory = memories.remove(memoryId);
+                if (memory != null) {
+                    // Remove from user memories index
+                    String userId = memory.getUserId();
+                    Set<String> userMems = userMemories.get(userId);
+                    if (userMems != null) {
+                        userMems.remove(memoryId);
+                    }
+                    
+                    // Remove any relationships involving this memory
+                    memoryRelationships.remove(memoryId);
+                    totalNodeOperations++;
+                }
+                
+                System.out.println("高性能GraphStore: 内存删除成功 " + memoryId);
+                return null;
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to delete memory", e);
+            }
+        });
+    }
+    
+    @Override
+    public CompletableFuture<List<EnhancedMemory>> getUserMemories(String userId) {
+        return CompletableFuture.supplyAsync(() -> {
+            totalQueries++;
+            Set<String> userMems = userMemories.get(userId);
+            if (userMems == null || userMems.isEmpty()) {
+                return new ArrayList<>();
+            }
+            
+            return userMems.stream()
+                    .map(memories::get)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+        });
+    }
+    
+    @Override
+    public CompletableFuture<List<EnhancedMemory>> getMemoryHistory(String userId) {
+        return CompletableFuture.supplyAsync(() -> {
+            totalQueries++;
+            Set<String> userMems = userMemories.get(userId);
+            if (userMems == null || userMems.isEmpty()) {
+                return new ArrayList<>();
+            }
+            
+            return userMems.stream()
+                    .map(memories::get)
+                    .filter(Objects::nonNull)
+                    .sorted(Comparator.comparing(EnhancedMemory::getCreatedAt))
+                    .collect(Collectors.toList());
+        });
+    }
+    
+    @Override
+    public CompletableFuture<List<EnhancedMemory>> searchMemories(String query, String userId, int limit) {
+        return CompletableFuture.supplyAsync(() -> {
+            totalQueries++;
+            if (query == null || query.trim().isEmpty()) {
+                return new ArrayList<>();
+            }
+            
+            Set<String> userMems = userMemories.get(userId);
+            if (userMems == null || userMems.isEmpty()) {
+                return new ArrayList<>();
+            }
+            
+            String lowerQuery = query.toLowerCase();
+            return userMems.stream()
+                    .map(memories::get)
+                    .filter(Objects::nonNull)
+                    .filter(memory -> memory.getContent().toLowerCase().contains(lowerQuery))
+                    .limit(limit)
+                    .collect(Collectors.toList());
+        });
+    }
+    
+    @Override
+    public CompletableFuture<Void> addRelationship(String fromMemoryId, String toMemoryId, 
+                                                  String relationshipType, Map<String, Object> properties) {
+        return CompletableFuture.supplyAsync(() -> {
+            if (!memories.containsKey(fromMemoryId)) {
+                throw new IllegalArgumentException("Source memory " + fromMemoryId + " does not exist");
+            }
+            if (!memories.containsKey(toMemoryId)) {
+                throw new IllegalArgumentException("Target memory " + toMemoryId + " does not exist");
+            }
+            
+            try {
+                String relationshipId = "rel_" + System.currentTimeMillis() + "_" + Math.random();
+                
+                // Create a simplified relationship entry for tracking
+                relationships.put(relationshipId, new Relationship(
+                    relationshipId, relationshipType, fromMemoryId, toMemoryId, 
+                    properties != null ? properties : new HashMap<>()
+                ));
+                
+                // Add to memory relationships index
+                memoryRelationships.computeIfAbsent(fromMemoryId, k -> ConcurrentHashMap.newKeySet()).add(relationshipId);
+                memoryRelationships.computeIfAbsent(toMemoryId, k -> ConcurrentHashMap.newKeySet()).add(relationshipId);
+                
+                totalRelationshipOperations++;
+                System.out.println("高性能GraphStore: 内存关系添加成功 " + relationshipId);
+                return null;
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to add memory relationship", e);
+            }
+        });
     }
 }
