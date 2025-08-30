@@ -1,0 +1,45 @@
+# Mem0 Configuration Example
+mem0:
+  # Vector Database Configuration
+  vector-store:
+    provider: milvus
+    host: ${MILVUS_HOST:localhost}
+    port: ${MILVUS_PORT:19530}
+    token: ${MILVUS_TOKEN:}
+    database: ${MILVUS_DATABASE:default}
+  
+  # Graph Database Configuration
+  graph-store:
+    provider: neo4j
+    uri: ${NEO4J_URI:bolt://localhost:7687}
+    username: ${NEO4J_USERNAME:neo4j}
+    password: ${NEO4J_PASSWORD:password}
+  
+  # LLM Configuration
+  llm:
+    provider: ${LLM_PROVIDER:mock}
+    api-key: ${OPENAI_API_KEY:}
+    model: ${LLM_MODEL:gpt-4}
+    temperature: 0.7
+    max-tokens: 1000
+  
+  # Embedding Configuration
+  embedding:
+    provider: ${EMBEDDING_PROVIDER:mock}
+    api-key: ${OPENAI_API_KEY:}
+    model: ${EMBEDDING_MODEL:text-embedding-ada-002}
+
+# Logging Configuration
+logging:
+  level:
+    com.mem0: DEBUG
+    root: INFO
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# Spring Boot Configuration
+spring:
+  application:
+    name: mem0-spring-boot-example
+  main:
+    banner-mode: off

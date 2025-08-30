@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(mvn clean:*)",
+      "Bash(tree:*)",
+      "WebFetch(domain:docs.mem0.ai)",
+      "Bash(mvn test:*)",
+      "Bash(mvn compile:*)",
+      "Bash(find:*)",
+      "Bash(javac:*)",
+      "Bash(java:*)",
+      "Bash(echo $JAVA_HOME)",
+      "Bash(export:*)",
+      "Bash(sed:*)",
+      "Bash(grep:*)",
+      "Bash(timeout 30 mvn compile)",
+      "Bash(/usr/libexec/java_home:*)",
+      "Bash(git checkout:*)",
+      "Bash(mvn dependency:resolve:*)",
+      "Bash(mvn dependency:*)",
+      "Bash(jar:*)",
+      "Bash(timeout 30 mvn compile test-compile)"
+    ],
+    "deny": [],
+    "ask": [],
+    "additionalDirectories": [
+      "/private/tmp"
+    ]
+  }
+}

@@ -1,0 +1,47 @@
+# Mem0 Java Configuration Example
+# Copy this file and modify according to your setup
+
+# Vector Database Configuration
+vectorStore:
+  provider: "milvus"  # Options: "milvus"
+  host: "localhost"
+  port: 19530
+  token: "${MILVUS_TOKEN:}"  # Optional authentication token
+  database: "${MILVUS_DATABASE:default}"
+  additionalConfig:
+    # Any additional Milvus-specific configuration
+    connectTimeoutMs: 10000
+    keepAliveTimeMs: 30000
+
+# Graph Database Configuration  
+graphStore:
+  provider: "neo4j"  # Options: "neo4j"
+  uri: "${NEO4J_URI:bolt://localhost:7687}"
+  username: "${NEO4J_USERNAME:neo4j}"
+  password: "${NEO4J_PASSWORD:password}"
+  additionalConfig:
+    # Neo4j driver configuration
+    connectionTimeoutMillis: 5000
+    maxConnectionPoolSize: 100
+
+# Large Language Model Configuration
+llm:
+  provider: "${LLM_PROVIDER:mock}"  # Options: "openai", "mock"
+  apiKey: "${OPENAI_API_KEY:}"
+  model: "${LLM_MODEL:gpt-4}"
+  temperature: 0.7
+  maxTokens: 1000
+  additionalConfig:
+    # Provider-specific settings
+    organizationId: "${OPENAI_ORG_ID:}"
+    baseUrl: "https://api.openai.com/v1"
+
+# Embedding Service Configuration
+embedding:
+  provider: "${EMBEDDING_PROVIDER:mock}"  # Options: "openai", "mock"  
+  apiKey: "${OPENAI_API_KEY:}"
+  model: "${EMBEDDING_MODEL:text-embedding-ada-002}"
+  additionalConfig:
+    # Provider-specific settings
+    batchSize: 100
+    maxRetries: 3

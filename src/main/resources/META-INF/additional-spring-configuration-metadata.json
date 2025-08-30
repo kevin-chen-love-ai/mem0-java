@@ -1,0 +1,100 @@
+{
+  "properties": [
+    {
+      "name": "mem0.vector-store.provider",
+      "type": "java.lang.String",
+      "description": "Vector store provider type (e.g., 'milvus')",
+      "defaultValue": "milvus"
+    },
+    {
+      "name": "mem0.vector-store.host",
+      "type": "java.lang.String",
+      "description": "Vector store host address",
+      "defaultValue": "localhost"
+    },
+    {
+      "name": "mem0.vector-store.port",
+      "type": "java.lang.Integer",
+      "description": "Vector store port number",
+      "defaultValue": 19530
+    },
+    {
+      "name": "mem0.vector-store.token",
+      "type": "java.lang.String",
+      "description": "Vector store authentication token"
+    },
+    {
+      "name": "mem0.vector-store.database",
+      "type": "java.lang.String",
+      "description": "Vector store database name"
+    },
+    {
+      "name": "mem0.graph-store.provider",
+      "type": "java.lang.String",
+      "description": "Graph store provider type (e.g., 'neo4j')",
+      "defaultValue": "neo4j"
+    },
+    {
+      "name": "mem0.graph-store.uri",
+      "type": "java.lang.String",
+      "description": "Graph store connection URI",
+      "defaultValue": "bolt://localhost:7687"
+    },
+    {
+      "name": "mem0.graph-store.username",
+      "type": "java.lang.String",
+      "description": "Graph store username",
+      "defaultValue": "neo4j"
+    },
+    {
+      "name": "mem0.graph-store.password",
+      "type": "java.lang.String",
+      "description": "Graph store password",
+      "defaultValue": "password"
+    },
+    {
+      "name": "mem0.llm.provider",
+      "type": "java.lang.String",
+      "description": "LLM provider type (e.g., 'openai', 'mock')",
+      "defaultValue": "mock"
+    },
+    {
+      "name": "mem0.llm.api-key",
+      "type": "java.lang.String",
+      "description": "LLM provider API key"
+    },
+    {
+      "name": "mem0.llm.model",
+      "type": "java.lang.String",
+      "description": "LLM model name"
+    },
+    {
+      "name": "mem0.llm.temperature",
+      "type": "java.lang.Double",
+      "description": "LLM generation temperature",
+      "defaultValue": 0.7
+    },
+    {
+      "name": "mem0.llm.max-tokens",
+      "type": "java.lang.Integer",
+      "description": "Maximum tokens for LLM generation",
+      "defaultValue": 1000
+    },
+    {
+      "name": "mem0.embedding.provider",
+      "type": "java.lang.String",
+      "description": "Embedding provider type (e.g., 'openai', 'mock')",
+      "defaultValue": "mock"
+    },
+    {
+      "name": "mem0.embedding.api-key",
+      "type": "java.lang.String",
+      "description": "Embedding provider API key"
+    },
+    {
+      "name": "mem0.embedding.model",
+      "type": "java.lang.String",
+      "description": "Embedding model name"
+    }
+  ]
+}

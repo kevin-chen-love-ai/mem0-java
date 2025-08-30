@@ -1,0 +1,128 @@
+# Java
+*.class
+*.jar
+*.war
+*.ear
+*.sar
+*.zip
+*.tar.gz
+*.rar
+hs_err_pid*
+replay_pid*
+
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# Gradle
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# IDE Files
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/
+.settings/
+.project
+.classpath
+.factorypath
+
+# OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+*.log.*
+*.out
+*.err
+
+# API Keys and Secrets
+.env
+*.key
+*.pem
+config/secrets/
+secrets.properties
+api-keys.properties
+
+# Application Specific
+mem0-data/
+temp/
+cache/
+uploads/
+
+# Test Coverage Reports
+target/site/
+coverage/
+.nyc_output/
+*.lcov
+
+# Documentation Build
+docs/build/
+site/
+_site/
+.jekyll-cache/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# Backup files
+*.bak
+*.backup
+*.tmp
+*~
+
+# JetBrains
+.idea/
+*.iml
+
+# Eclipse
+.metadata
+.recommenders
+.project
+.settings/
+
+# NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# Spring Boot
+spring.log
+
+# Memory dumps
+*.hprof
+*.dump
+
+# Local environment
+local.properties
+application-local.properties
+application-dev.properties
+
+# Generated files
+generated/
+gen/
