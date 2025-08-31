@@ -112,7 +112,14 @@ public class HighPerformanceGraphStore implements GraphStore {
                 // 更新用户索引
                 String userId = (String) properties.get("userId");
                 if (userId != null) {
-                    userNodes.computeIfAbsent(userId, k -> ConcurrentHashMap.newKeySet()).add(nodeId);
+                    userNodes.compute(userId, (k, v) -> {
+                        Set<String> nodes = v;
+                        if (nodes == null) {
+                            nodes = ConcurrentHashMap.newKeySet();
+                        }
+                        nodes.add(nodeId);
+                        return nodes;
+                    });
                 }
                 
                 // 更新属性索引
@@ -127,6 +134,40 @@ public class HighPerformanceGraphStore implements GraphStore {
                 throw new RuntimeException("创建节点失败", e);
             }
         });
+    }
+    
+    /**
+     * 使用指定ID创建节点
+     */
+    public void createNodeWithId(String nodeId, Map<String, Object> properties) {
+        try {
+            MemoryNode node = new MemoryNode(nodeId, properties);
+            nodes.put(nodeId, node);
+            
+            // 更新用户索引
+            String userId = (String) properties.get("userId");
+            if (userId != null) {
+                userNodes.compute(userId, (k, v) -> {
+                    Set<String> nodes = v;
+                    if (nodes == null) {
+                        nodes = ConcurrentHashMap.newKeySet();
+                    }
+                    nodes.add(nodeId);
+                    return nodes;
+                });
+            }
+            
+            // 更新属性索引
+            updatePropertyIndex(nodeId, properties);
+            
+            // 清理缓存
+            invalidateNodeCache(nodeId);
+            
+            totalNodeOperations++;
+            System.out.println("高性能GraphStore: 节点创建成功 " + nodeId);
+        } catch (Exception e) {
+            throw new RuntimeException("创建节点失败", e);
+        }
     }
     
     @Override
@@ -223,7 +264,14 @@ public class HighPerformanceGraphStore implements GraphStore {
                 toNode.incomingRelationships.add(relationshipId);
                 
                 // 更新关系类型索引
-                relationshipTypeIndex.computeIfAbsent(relationshipType, k -> ConcurrentHashMap.newKeySet()).add(relationshipId);
+                relationshipTypeIndex.compute(relationshipType, (k, v) -> {
+                    Set<String> rels = v;
+                    if (rels == null) {
+                        rels = ConcurrentHashMap.newKeySet();
+                    }
+                    rels.add(relationshipId);
+                    return rels;
+                });
                 
                 // 清理缓存
                 invalidateRelationshipCache(sourceNodeId, targetNodeId);
@@ -818,7 +866,14 @@ public class HighPerformanceGraphStore implements GraphStore {
                 
                 // Add to user memories index
                 String userId = memory.getUserId();
-                userMemories.computeIfAbsent(userId, k -> ConcurrentHashMap.newKeySet()).add(memoryId);
+                userMemories.compute(userId, (k, v) -> {
+                    Set<String> userMems = v;
+                    if (userMems == null) {
+                        userMems = ConcurrentHashMap.newKeySet();
+                    }
+                    userMems.add(memoryId);
+                    return userMems;
+                });
                 
                 totalNodeOperations++;
                 System.out.println("高性能GraphStore: 内存添加成功 " + memoryId);
@@ -963,8 +1018,22 @@ public class HighPerformanceGraphStore implements GraphStore {
                 ));
                 
                 // Add to memory relationships index
-                memoryRelationships.computeIfAbsent(fromMemoryId, k -> ConcurrentHashMap.newKeySet()).add(relationshipId);
-                memoryRelationships.computeIfAbsent(toMemoryId, k -> ConcurrentHashMap.newKeySet()).add(relationshipId);
+                memoryRelationships.compute(fromMemoryId, (k, v) -> {
+                    Set<String> rels = v;
+                    if (rels == null) {
+                        rels = ConcurrentHashMap.newKeySet();
+                    }
+                    rels.add(relationshipId);
+                    return rels;
+                });
+                memoryRelationships.compute(toMemoryId, (k, v) -> {
+                    Set<String> rels = v;
+                    if (rels == null) {
+                        rels = ConcurrentHashMap.newKeySet();
+                    }
+                    rels.add(relationshipId);
+                    return rels;
+                });
                 
                 totalRelationshipOperations++;
                 System.out.println("高性能GraphStore: 内存关系添加成功 " + relationshipId);

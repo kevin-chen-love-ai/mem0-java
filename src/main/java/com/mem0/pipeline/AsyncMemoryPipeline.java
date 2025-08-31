@@ -241,7 +241,7 @@ public class AsyncMemoryPipeline {
                     nodeProperties.put("createdAt", memory.getCreatedAt());
                     
                     CompletableFuture<Void> graphStoreFuture = 
-                        graphStore.createNode("Memory", nodeProperties).thenApply(nodeId -> null);
+                        createGraphNode(memoryId, nodeProperties);
                     
                     return CompletableFuture.allOf(vectorStoreFuture, graphStoreFuture)
                         .thenApply(v -> {
@@ -687,19 +687,52 @@ public class AsyncMemoryPipeline {
             vectorStore.insert(defaultCollection, embedding, vectorMetadata);
         
         Map<String, Object> nodeProps = new HashMap<>();
+        nodeProps.put("id", memoryId); // 添加ID属性
         nodeProps.put("content", memory.getContent());
         nodeProps.put("userId", memory.getUserId());
         nodeProps.put("memoryType", memory.getType() != null ? memory.getType().toString() : "UNKNOWN");
         nodeProps.put("createdAt", memory.getCreatedAt());
         
+        logger.debug("准备创建图节点: {}", memoryId);
+        
+        // 直接创建节点，使用memoryId作为节点ID
         CompletableFuture<Void> graphStoreFuture = 
-            graphStore.createNode("Memory", nodeProps).thenApply(nodeId -> null);
+            createGraphNode(memoryId, nodeProps);
         
         return CompletableFuture.allOf(vectorStoreFuture.thenApply(id -> null), graphStoreFuture)
             .thenApply(v -> {
+                logger.debug("内存创建完成: {}", memoryId);
                 memoryCache.put(memoryId, memory);
                 return memoryId;
+            })
+            .exceptionally(throwable -> {
+                logger.error("内存创建失败: {}", memoryId, throwable);
+                throw new RuntimeException("内存创建失败", throwable);
             });
+    }
+    
+    private CompletableFuture<Void> createGraphNode(String nodeId, Map<String, Object> properties) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                logger.debug("创建图节点: {}, 图存储类型: {}", nodeId, graphStore.getClass().getSimpleName());
+                
+                // 直接在高性能图存储中创建节点，使用指定的ID
+                if (graphStore instanceof com.mem0.graph.impl.HighPerformanceGraphStore) {
+                    logger.debug("使用HighPerformanceGraphStore创建节点");
+                    com.mem0.graph.impl.HighPerformanceGraphStore hpGraphStore = 
+                        (com.mem0.graph.impl.HighPerformanceGraphStore) graphStore;
+                    hpGraphStore.createNodeWithId(nodeId, properties);
+                } else {
+                    logger.debug("使用默认图存储创建节点");
+                    // 对于其他图存储，使用默认方法
+                    graphStore.createNode("Memory", properties);
+                }
+                return null;
+            } catch (Exception e) {
+                logger.error("创建图节点失败: {}", nodeId, e);
+                throw new RuntimeException("创建图节点失败", e);
+            }
+        });
     }
 
     private CompletableFuture<EnhancedMemory> getMemoryById(String memoryId) {

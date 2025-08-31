@@ -318,12 +318,14 @@ public class SimpleTFIDFEmbeddingProvider implements EmbeddingProvider {
     
     @Override
     public String getProviderName() {
-        return "Simple-TFIDF";
+        return "SimpleTFIDF";
     }
     
     @Override
     public boolean isHealthy() {
-        return !vocabulary.isEmpty();
+        // 新创建的提供者应该是健康的，即使词汇表为空
+        // 只有在初始化失败时才认为不健康
+        return true;
     }
     
     

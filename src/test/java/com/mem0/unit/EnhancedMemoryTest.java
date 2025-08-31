@@ -10,6 +10,49 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * 增强内存对象单元测试 - Unit tests for EnhancedMemory class
+ * 
+ * <p>此测试类验证EnhancedMemory类的所有核心功能，包括内存创建、访问跟踪、更新管理、
+ * 重要性评估、衰减计算、关系管理等高级特性。确保内存对象的行为符合预期，
+ * 并且在各种场景下能够正确处理内存生命周期。</p>
+ * 
+ * <p>This test class verifies all core functionalities of the EnhancedMemory class,
+ * including memory creation, access tracking, update management, importance assessment,
+ * decay calculation, relationship management, and other advanced features. It ensures
+ * that memory objects behave as expected and handle memory lifecycle correctly
+ * in various scenarios.</p>
+ * 
+ * <h3>测试覆盖范围 / Test Coverage:</h3>
+ * <ul>
+ *   <li>内存对象创建和初始化 / Memory object creation and initialization</li>
+ *   <li>工厂方法测试 / Factory method testing</li>
+ *   <li>访问和更新跟踪 / Access and update tracking</li>
+ *   <li>内存巩固和废弃机制 / Memory consolidation and deprecation mechanisms</li>
+ *   <li>TTL和过期管理 / TTL and expiration management</li>
+ *   <li>年龄计算和衰减评分 / Age calculation and decay scoring</li>
+ *   <li>关系管理和相似度计算 / Relationship management and similarity calculation</li>
+ *   <li>元数据和标签管理 / Metadata and tag management</li>
+ *   <li>重要性动态调整 / Dynamic importance adjustment</li>
+ *   <li>对象相等性和哈希码 / Object equality and hash code</li>
+ * </ul>
+ * 
+ * <h3>测试策略 / Testing Strategy:</h3>
+ * <ul>
+ *   <li>使用JUnit 5测试框架 / Uses JUnit 5 testing framework</li>
+ *   <li>每个测试方法独立运行 / Each test method runs independently</li>
+ *   <li>通过@BeforeEach设置测试环境 / Test environment setup via @BeforeEach</li>
+ *   <li>覆盖正常和边界情况 / Covers normal and edge cases</li>
+ *   <li>验证业务逻辑正确性 / Validates business logic correctness</li>
+ * </ul>
+ * 
+ * @author kevin.chen
+ * @version 1.0
+ * @since 1.0
+ * @see EnhancedMemory
+ * @see MemoryType
+ * @see MemoryImportance
+ */
 public class EnhancedMemoryTest {
     
     private EnhancedMemory memory;

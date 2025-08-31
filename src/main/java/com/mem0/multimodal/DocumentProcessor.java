@@ -106,12 +106,18 @@ public class DocumentProcessor implements ModalityProcessor {
                 // 提取文本内容
                 String extractedText = extractTextContent(content, contentType);
                 
-                if (extractedText == null || extractedText.trim().isEmpty()) {
-                    throw new RuntimeException("Unable to extract text from document: " + filePath);
+                if (extractedText == null) {
+                    extractedText = "";
+                }
+                
+                // If extracted text is empty, this is valid for empty documents
+                if (extractedText.trim().isEmpty()) {
+                    logger.debug("Document appears to be empty: {}", filePath);
                 }
                 
                 // 分析文档结构
-                Map<String, Object> metadata = analyzeDocumentStructure(extractedText, filePath, content.length);
+                int contentLength = content != null ? content.length : 0;
+                Map<String, Object> metadata = analyzeDocumentStructure(extractedText, filePath, contentLength);
                 
                 // 提取特征
                 Map<String, Object> features = extractDocumentFeatures(extractedText).join();
@@ -196,6 +202,10 @@ public class DocumentProcessor implements ModalityProcessor {
      * @return 提取的文本内容
      */
     private String extractTextContent(byte[] content, String contentType) {
+        if (content == null || content.length == 0) {
+            return "";
+        }
+        
         if (contentType.equals("text/plain") || contentType.equals("text/markdown")) {
             // 直接读取文本文件
             return new String(content, StandardCharsets.UTF_8);
@@ -217,33 +227,173 @@ public class DocumentProcessor implements ModalityProcessor {
     }
     
     /**
-     * 提取PDF文本（占位符实现）
+     * 提取PDF文本
      * 
      * @param content PDF字节数据
      * @return 提取的文本
      */
     private String extractPdfText(byte[] content) {
-        // 这里应该集成PDF处理库（如Apache PDFBox）
-        // 目前返回占位符文本
-        return "PDF content placeholder - integrate Apache PDFBox or similar PDF library for actual text extraction. " +
-               "Document size: " + content.length + " bytes. " +
-               "This would contain the actual extracted text from the PDF document, including all text content, " +
-               "preserving paragraph breaks and basic formatting where possible.";
+        try (ByteArrayInputStream inputStream = new ByteArrayInputStream(content)) {
+            // 使用Apache PDFBox提取PDF文本
+            try (org.apache.pdfbox.pdmodel.PDDocument document = org.apache.pdfbox.pdmodel.PDDocument.load(inputStream)) {
+                org.apache.pdfbox.text.PDFTextStripper stripper = new org.apache.pdfbox.text.PDFTextStripper();
+                
+                // 配置文本提取选项
+                stripper.setSortByPosition(true);
+                stripper.setLineSeparator("\n");
+                stripper.setWordSeparator(" ");
+                
+                // 提取文本
+                String extractedText = stripper.getText(document);
+                
+                if (extractedText == null || extractedText.trim().isEmpty()) {
+                    logger.warn("PDF document appears to be empty or contains no extractable text");
+                    return "";
+                }
+                
+                // 清理和格式化文本
+                String cleanedText = cleanExtractedText(extractedText);
+                
+                logger.debug("Successfully extracted {} characters from PDF ({} bytes)", 
+                           cleanedText.length(), content.length);
+                
+                return cleanedText;
+                
+            } catch (java.io.IOException e) {
+                logger.warn("IO error while extracting PDF text, treating as plain text: {}", e.getMessage());
+                return new String(content, StandardCharsets.UTF_8);
+            } catch (Exception e) {
+                logger.warn("Error during PDF text extraction, treating as plain text: {}", e.getMessage());
+                return new String(content, StandardCharsets.UTF_8);
+            }
+        } catch (Exception e) {
+            logger.warn("Error extracting PDF text, treating as plain text: {}", e.getMessage());
+            return new String(content, StandardCharsets.UTF_8);
+        }
     }
     
     /**
-     * 提取Word文档文本（占位符实现）
+     * 提取Word文档文本
      * 
      * @param content Word文档字节数据
      * @return 提取的文本
      */
     private String extractWordText(byte[] content) {
-        // 这里应该集成Word处理库（如Apache POI）
-        // 目前返回占位符文本
-        return "Word document content placeholder - integrate Apache POI library for actual text extraction. " +
-               "Document size: " + content.length + " bytes. " +
-               "This would contain the actual extracted text from the Word document, including headings, " +
-               "paragraphs, tables, and other text elements.";
+        try (ByteArrayInputStream inputStream = new ByteArrayInputStream(content)) {
+            // 检测是否为新格式(.docx)或旧格式(.doc)
+            String extractedText = null;
+            
+            try {
+                // 首先尝试作为.docx文件处理
+                extractedText = extractDocxText(inputStream);
+            } catch (Exception e) {
+                logger.debug("Failed to parse as DOCX, trying DOC format", e);
+                
+                // 重置输入流
+                inputStream.reset();
+                
+                try {
+                    // 尝试作为.doc文件处理
+                    extractedText = extractDocText(inputStream);
+                } catch (Exception docException) {
+                    logger.warn("Failed to parse as both DOCX and DOC formats, treating as plain text: {}", docException.getMessage());
+                    return new String(content, StandardCharsets.UTF_8);
+                }
+            }
+            
+            if (extractedText == null || extractedText.trim().isEmpty()) {
+                logger.warn("Word document appears to be empty or contains no extractable text");
+                return "";
+            }
+            
+            // 清理和格式化文本
+            String cleanedText = cleanExtractedText(extractedText);
+            
+            logger.debug("Successfully extracted {} characters from Word document ({} bytes)", 
+                       cleanedText.length(), content.length);
+            
+            return cleanedText;
+            
+        } catch (Exception e) {
+            logger.warn("Error extracting Word document text, treating as plain text: {}", e.getMessage());
+            return new String(content, StandardCharsets.UTF_8);
+        }
+    }
+    
+    /**
+     * 提取DOCX文档文本
+     */
+    private String extractDocxText(ByteArrayInputStream inputStream) throws Exception {
+        try (org.apache.poi.xwpf.usermodel.XWPFDocument document = new org.apache.poi.xwpf.usermodel.XWPFDocument(inputStream)) {
+            org.apache.poi.xwpf.extractor.XWPFWordExtractor extractor = new org.apache.poi.xwpf.extractor.XWPFWordExtractor(document);
+            
+            StringBuilder text = new StringBuilder();
+            
+            // 提取主要文档文本
+            text.append(extractor.getText());
+            
+            // 提取表格内容
+            for (org.apache.poi.xwpf.usermodel.XWPFTable table : document.getTables()) {
+                for (org.apache.poi.xwpf.usermodel.XWPFTableRow row : table.getRows()) {
+                    for (org.apache.poi.xwpf.usermodel.XWPFTableCell cell : row.getTableCells()) {
+                        text.append(" ").append(cell.getText());
+                    }
+                    text.append("\n");
+                }
+            }
+            
+            // 提取页眉页脚
+            for (org.apache.poi.xwpf.usermodel.XWPFHeader header : document.getHeaderList()) {
+                text.append("\n").append(header.getText());
+            }
+            for (org.apache.poi.xwpf.usermodel.XWPFFooter footer : document.getFooterList()) {
+                text.append("\n").append(footer.getText());
+            }
+            
+            extractor.close();
+            return text.toString();
+        }
+    }
+    
+    /**
+     * 提取DOC文档文本  
+     */
+    private String extractDocText(ByteArrayInputStream inputStream) throws Exception {
+        try (org.apache.poi.hwpf.HWPFDocument document = new org.apache.poi.hwpf.HWPFDocument(inputStream)) {
+            org.apache.poi.hwpf.extractor.WordExtractor extractor = new org.apache.poi.hwpf.extractor.WordExtractor(document);
+            
+            StringBuilder text = new StringBuilder();
+            
+            // 提取主要文本
+            text.append(extractor.getText());
+            
+            // 提取页眉页脚
+            text.append("\n").append(extractor.getHeaderText());
+            text.append("\n").append(extractor.getFooterText());
+            
+            extractor.close();
+            return text.toString();
+        }
+    }
+    
+    /**
+     * 清理提取的文本
+     */
+    private String cleanExtractedText(String text) {
+        if (text == null) return "";
+        
+        return text
+            // 统一换行符
+            .replaceAll("\\r\\n", "\n")
+            .replaceAll("\\r", "\n")
+            // 移除多余的空白字符
+            .replaceAll("[ \\t]+", " ")
+            // 合并多个换行符为最多两个
+            .replaceAll("\\n{3,}", "\n\n")
+            // 移除行首行尾空格
+            .replaceAll("(?m)^[ \\t]+|[ \\t]+$", "")
+            // 整体trim
+            .trim();
     }
     
     /**

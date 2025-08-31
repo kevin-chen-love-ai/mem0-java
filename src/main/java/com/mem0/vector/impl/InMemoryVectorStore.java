@@ -2,6 +2,9 @@ package com.mem0.vector.impl;
 
 import com.mem0.store.VectorStore;
 import com.mem0.model.SearchResult;
+import com.mem0.exception.VectorOperationException;
+import com.mem0.exception.MemoryValidationException;
+import com.mem0.constants.MemoryConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,6 +73,14 @@ public class InMemoryVectorStore implements VectorStore {
     @Override
     public CompletableFuture<Void> createCollection(String collectionName, int dimension) {
         return CompletableFuture.supplyAsync(() -> {
+            // Input validation
+            if (collectionName == null || collectionName.trim().isEmpty()) {
+                throw new MemoryValidationException("Collection name cannot be null or empty");
+            }
+            if (dimension <= 0 || dimension > MemoryConstants.MAX_VECTOR_DIMENSION) {
+                throw new MemoryValidationException("Dimension must be between 1 and " + MemoryConstants.MAX_VECTOR_DIMENSION);
+            }
+            
             logger.debug("创建向量集合: {} (维度: {})", collectionName, dimension);
             // 内存实现中，集合是动态创建的
             return null;
@@ -78,12 +89,24 @@ public class InMemoryVectorStore implements VectorStore {
     
     @Override
     public CompletableFuture<Boolean> collectionExists(String collectionName) {
-        return CompletableFuture.supplyAsync(() -> true); // 内存实现中集合总是存在
+        return CompletableFuture.supplyAsync(() -> {
+            // Input validation
+            if (collectionName == null || collectionName.trim().isEmpty()) {
+                throw new IllegalArgumentException("Collection name cannot be null or empty");
+            }
+            
+            return true; // 内存实现中集合总是存在
+        });
     }
     
     @Override
     public CompletableFuture<Void> dropCollection(String collectionName) {
         return CompletableFuture.supplyAsync(() -> {
+            // Input validation
+            if (collectionName == null || collectionName.trim().isEmpty()) {
+                throw new IllegalArgumentException("Collection name cannot be null or empty");
+            }
+            
             logger.debug("删除向量集合: {}", collectionName);
             clear(); // 清空所有数据
             return null;
@@ -94,6 +117,9 @@ public class InMemoryVectorStore implements VectorStore {
     public CompletableFuture<String> insert(String collectionName, List<Float> vector, Map<String, Object> metadata) {
         return CompletableFuture.supplyAsync(() -> {
             try {
+                // Input validation
+                validateInsertInput(collectionName, vector, metadata);
+                
                 String id = java.util.UUID.randomUUID().toString();
                 logger.debug("插入向量: {}", id);
                 
@@ -109,14 +135,24 @@ public class InMemoryVectorStore implements VectorStore {
                 // 按用户跟踪
                 String userId = (String) metadata.get("userId");
                 if (userId != null) {
-                    userMemories.computeIfAbsent(userId, k -> new ArrayList<>()).add(id);
+                    userMemories.compute(userId, (k, v) -> {
+                        List<String> userMems = v;
+                        if (userMems == null) {
+                            userMems = new ArrayList<>();
+                        }
+                        userMems.add(id);
+                        return userMems;
+                    });
                 }
                 
                 logger.debug("向量插入成功: {}", id);
                 return id;
+            } catch (MemoryValidationException e) {
+                // Re-throw validation exceptions as-is
+                throw e;
             } catch (Exception e) {
-                logger.error("向量插入失败", e);
-                throw new RuntimeException("向量插入失败", e);
+                logger.error("Vector insert operation failed for collection: {}", collectionName, e);
+                throw new VectorOperationException("Failed to insert vector into collection: " + collectionName, e);
             }
         });
     }
@@ -126,8 +162,21 @@ public class InMemoryVectorStore implements VectorStore {
                                                       List<List<Float>> vectors,
                                                       List<Map<String, Object>> metadataList) {
         return CompletableFuture.supplyAsync(() -> {
+            // Input validation
+            if (collectionName == null || collectionName.trim().isEmpty()) {
+                throw new MemoryValidationException("Collection name cannot be null or empty");
+            }
+            if (vectors == null || vectors.isEmpty()) {
+                throw new MemoryValidationException("Vectors list cannot be null or empty");
+            }
+            if (metadataList == null) {
+                throw new MemoryValidationException("Metadata list cannot be null");
+            }
             if (vectors.size() != metadataList.size()) {
-                throw new IllegalArgumentException("向量和元数据列表大小不匹配");
+                throw new MemoryValidationException("向量和元数据列表大小不匹配");
+            }
+            if (vectors.size() > MemoryConstants.MAX_BATCH_SIZE) { // Reasonable batch size limit
+                throw new MemoryValidationException("Batch size too large (max " + MemoryConstants.MAX_BATCH_SIZE + " vectors)");
             }
             
             logger.info("开始批量插入 {} 个向量到集合: {}", vectors.size(), collectionName);
@@ -142,9 +191,12 @@ public class InMemoryVectorStore implements VectorStore {
                 logger.info("批量插入完成，插入 {} 个向量", ids.size());
                 return ids;
                 
+            } catch (MemoryValidationException | VectorOperationException e) {
+                // Re-throw specific exceptions as-is
+                throw e;
             } catch (Exception e) {
-                logger.error("批量插入失败", e);
-                throw new RuntimeException("批量插入失败", e);
+                logger.error("Batch insert operation failed for collection: {}", collectionName, e);
+                throw new VectorOperationException("Failed to batch insert vectors into collection: " + collectionName, e);
             }
         });
     }
@@ -156,6 +208,9 @@ public class InMemoryVectorStore implements VectorStore {
                                                                          Map<String, Object> filter) {
         return CompletableFuture.supplyAsync(() -> {
             try {
+                // Input validation
+                validateSearchInput(collectionName, queryVector, topK, filter);
+                
                 // 转换List<Float>到float[]
                 float[] queryEmbedding = new float[queryVector.size()];
                 for (int i = 0; i < queryVector.size(); i++) {
@@ -201,9 +256,12 @@ public class InMemoryVectorStore implements VectorStore {
                 
                 logger.debug("搜索完成，返回 {} 个结果", results.size());
                 return results;
+            } catch (MemoryValidationException e) {
+                // Re-throw validation exceptions as-is
+                throw e;
             } catch (Exception e) {
-                logger.error("向量搜索失败，集合: " + collectionName, e);
-                throw new RuntimeException("向量搜索失败", e);
+                logger.error("Vector search operation failed for collection: {}", collectionName, e);
+                throw new VectorOperationException("Failed to search vectors in collection: " + collectionName, e);
             }
         });
     }
@@ -230,6 +288,14 @@ public class InMemoryVectorStore implements VectorStore {
     public CompletableFuture<Void> delete(String collectionName, String id) {
         return CompletableFuture.supplyAsync(() -> {
             try {
+                // Input validation
+                if (collectionName == null || collectionName.trim().isEmpty()) {
+                    throw new MemoryValidationException("Collection name cannot be null or empty");
+                }
+                if (id == null || id.trim().isEmpty()) {
+                    throw new MemoryValidationException("Vector ID cannot be null or empty");
+                }
+                
                 logger.debug("删除向量: {}", id);
                 
                 VectorEntry entry = vectors.remove(id);
@@ -251,9 +317,12 @@ public class InMemoryVectorStore implements VectorStore {
                     logger.warn("向量不存在: {}", id);
                     return null;
                 }
+            } catch (MemoryValidationException e) {
+                // Re-throw validation exceptions as-is
+                throw e;
             } catch (Exception e) {
-                logger.error("向量删除失败: " + id, e);
-                throw new RuntimeException("向量删除失败", e);
+                logger.error("Vector delete operation failed for ID: {}", id, e);
+                throw new VectorOperationException("Failed to delete vector with ID: " + id, e);
             }
         });
     }
@@ -269,7 +338,14 @@ public class InMemoryVectorStore implements VectorStore {
                 // Track by user
                 String userId = (String) properties.get("userId");
                 if (userId != null) {
-                    userMemories.computeIfAbsent(userId, k -> new ArrayList<>()).add(id);
+                    userMemories.compute(userId, (k, v) -> {
+                        List<String> userMems = v;
+                        if (userMems == null) {
+                            userMems = new ArrayList<>();
+                        }
+                        userMems.add(id);
+                        return userMems;
+                    });
                 }
                 
                 logger.debug("Vector inserted successfully: {}", id);
@@ -455,6 +531,14 @@ public class InMemoryVectorStore implements VectorStore {
     @Override
     public CompletableFuture<VectorStore.VectorDocument> get(String collectionName, String id) {
         return CompletableFuture.supplyAsync(() -> {
+            // Input validation
+            if (collectionName == null || collectionName.trim().isEmpty()) {
+                throw new IllegalArgumentException("Collection name cannot be null or empty");
+            }
+            if (id == null || id.trim().isEmpty()) {
+                throw new IllegalArgumentException("Vector ID cannot be null or empty");
+            }
+            
             VectorEntry entry = vectors.get(id);
             if (entry == null) {
                 return null;
@@ -474,6 +558,15 @@ public class InMemoryVectorStore implements VectorStore {
     public CompletableFuture<Void> deleteByFilter(String collectionName, Map<String, Object> filter) {
         return CompletableFuture.supplyAsync(() -> {
             try {
+                // Input validation
+                if (collectionName == null || collectionName.trim().isEmpty()) {
+                    throw new IllegalArgumentException("Collection name cannot be null or empty");
+                }
+                if (filter == null || filter.isEmpty()) {
+                    throw new IllegalArgumentException("Filter cannot be null or empty for safety");
+                }
+                validateMetadata(filter);
+                
                 logger.debug("Deleting vectors by filter: {}", filter);
                 
                 // 找到匹配过滤条件的向量
@@ -540,14 +633,109 @@ public class InMemoryVectorStore implements VectorStore {
         double normA = 0.0;
         double normB = 0.0;
         
+        // 向量化计算优化
         for (int i = 0; i < vectorA.length; i++) {
-            dotProduct += vectorA[i] * vectorB[i];
-            normA += vectorA[i] * vectorA[i];
-            normB += vectorB[i] * vectorB[i];
+            double aVal = vectorA[i];
+            double bVal = vectorB[i];
+            dotProduct += aVal * bVal;
+            normA += aVal * aVal;
+            normB += bVal * bVal;
         }
         
         double magnitude = Math.sqrt(normA) * Math.sqrt(normB);
         return magnitude == 0.0 ? 0.0f : (float) (dotProduct / magnitude);
+    }
+    
+    /**
+     * Calculate Euclidean distance between two vectors
+     */
+    private float calculateEuclideanDistance(float[] vectorA, float[] vectorB) {
+        if (vectorA.length != vectorB.length) {
+            throw new IllegalArgumentException("Vectors must have the same length");
+        }
+        
+        double sum = 0.0;
+        for (int i = 0; i < vectorA.length; i++) {
+            double diff = vectorA[i] - vectorB[i];
+            sum += diff * diff;
+        }
+        
+        return (float) Math.sqrt(sum);
+    }
+    
+    /**
+     * Calculate dot product similarity between two vectors
+     */
+    private float calculateDotProductSimilarity(float[] vectorA, float[] vectorB) {
+        if (vectorA.length != vectorB.length) {
+            throw new IllegalArgumentException("Vectors must have the same length");
+        }
+        
+        double dotProduct = 0.0;
+        for (int i = 0; i < vectorA.length; i++) {
+            dotProduct += vectorA[i] * vectorB[i];
+        }
+        
+        return (float) dotProduct;
+    }
+    
+    /**
+     * Calculate Manhattan distance between two vectors
+     */
+    private float calculateManhattanDistance(float[] vectorA, float[] vectorB) {
+        if (vectorA.length != vectorB.length) {
+            throw new IllegalArgumentException("Vectors must have the same length");
+        }
+        
+        float sum = 0.0f;
+        for (int i = 0; i < vectorA.length; i++) {
+            sum += Math.abs(vectorA[i] - vectorB[i]);
+        }
+        
+        return sum;
+    }
+    
+    /**
+     * Calculate angular distance (based on cosine similarity)
+     */
+    private float calculateAngularDistance(float[] vectorA, float[] vectorB) {
+        float cosineSim = calculateCosineSimilarity(vectorA, vectorB);
+        // Convert to angular distance: arccos(cosine_similarity) / π
+        return (float) (Math.acos(Math.max(-1.0, Math.min(1.0, cosineSim))) / Math.PI);
+    }
+    
+    /**
+     * Enum for similarity metrics
+     */
+    public enum SimilarityMetric {
+        COSINE,
+        EUCLIDEAN,
+        DOT_PRODUCT,
+        MANHATTAN,
+        ANGULAR
+    }
+    
+    /**
+     * Calculate similarity using specified metric
+     */
+    private float calculateSimilarity(float[] vectorA, float[] vectorB, SimilarityMetric metric) {
+        switch (metric) {
+            case COSINE:
+                return calculateCosineSimilarity(vectorA, vectorB);
+            case EUCLIDEAN:
+                // Convert distance to similarity (higher is better)
+                return 1.0f / (1.0f + calculateEuclideanDistance(vectorA, vectorB));
+            case DOT_PRODUCT:
+                return calculateDotProductSimilarity(vectorA, vectorB);
+            case MANHATTAN:
+                // Convert distance to similarity (higher is better)
+                return 1.0f / (1.0f + calculateManhattanDistance(vectorA, vectorB));
+            case ANGULAR:
+                // Convert distance to similarity (higher is better)
+                return 1.0f - calculateAngularDistance(vectorA, vectorB);
+            default:
+                return calculateCosineSimilarity(vectorA, vectorB);
+        }
     }
     
     // Additional utility methods
@@ -563,5 +751,99 @@ public class InMemoryVectorStore implements VectorStore {
         logger.info("Clearing all vectors from store");
         vectors.clear();
         userMemories.clear();
+    }
+    
+    // Input validation methods
+    private void validateInsertInput(String collectionName, List<Float> vector, Map<String, Object> metadata) {
+        if (collectionName == null || collectionName.trim().isEmpty()) {
+            throw new MemoryValidationException("Collection name cannot be null or empty");
+        }
+        
+        if (collectionName.length() > MemoryConstants.MAX_COLLECTION_NAME_LENGTH) {
+            throw new MemoryValidationException("Collection name too long (max " + MemoryConstants.MAX_COLLECTION_NAME_LENGTH + " characters)");
+        }
+        
+        if (vector == null || vector.isEmpty()) {
+            throw new MemoryValidationException("Vector cannot be null or empty");
+        }
+        
+        if (vector.size() > MemoryConstants.MAX_VECTOR_DIMENSION) { // Reasonable limit for vector dimensions
+            throw new MemoryValidationException("Vector dimension too large (max " + MemoryConstants.MAX_VECTOR_DIMENSION + ")");
+        }
+        
+        // Check for null values in vector
+        for (int i = 0; i < vector.size(); i++) {
+            Float value = vector.get(i);
+            if (value == null || !Float.isFinite(value)) {
+                throw new MemoryValidationException("Vector contains invalid value at index " + i + ": " + value);
+            }
+        }
+        
+        if (metadata != null) {
+            validateMetadata(metadata);
+        }
+    }
+    
+    private void validateSearchInput(String collectionName, List<Float> queryVector, int topK, Map<String, Object> filter) {
+        if (collectionName == null || collectionName.trim().isEmpty()) {
+            throw new MemoryValidationException("Collection name cannot be null or empty");
+        }
+        
+        if (queryVector == null || queryVector.isEmpty()) {
+            throw new MemoryValidationException("Query vector cannot be null or empty");
+        }
+        
+        if (topK <= 0 || topK > MemoryConstants.MAX_SEARCH_TOPK) { // Reasonable limit
+            throw new MemoryValidationException("TopK must be between 1 and " + MemoryConstants.MAX_SEARCH_TOPK);
+        }
+        
+        // Check for null values in query vector
+        for (int i = 0; i < queryVector.size(); i++) {
+            Float value = queryVector.get(i);
+            if (value == null || !Float.isFinite(value)) {
+                throw new MemoryValidationException("Query vector contains invalid value at index " + i + ": " + value);
+            }
+        }
+        
+        if (filter != null) {
+            validateMetadata(filter);
+        }
+    }
+    
+    private void validateMetadata(Map<String, Object> metadata) {
+        if (metadata.size() > MemoryConstants.MAX_METADATA_FIELDS_COUNT) { // Reasonable limit for metadata fields
+            throw new MemoryValidationException("Too many metadata fields (max " + MemoryConstants.MAX_METADATA_FIELDS_COUNT + ")");
+        }
+        
+        for (Map.Entry<String, Object> entry : metadata.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+            
+            if (key == null || key.trim().isEmpty()) {
+                throw new MemoryValidationException("Metadata key cannot be null or empty");
+            }
+            
+            if (key.length() > MemoryConstants.MAX_METADATA_KEY_LENGTH) {
+                throw new MemoryValidationException("Metadata key too long (max " + MemoryConstants.MAX_METADATA_KEY_LENGTH + " characters): " + key);
+            }
+            
+            // Validate value types and sizes
+            if (value != null) {
+                if (value instanceof String) {
+                    String strValue = (String) value;
+                    if (strValue.length() > MemoryConstants.MAX_METADATA_STRING_VALUE_LENGTH) { // Reasonable limit for string values
+                        throw new MemoryValidationException("Metadata string value too long (max " + MemoryConstants.MAX_METADATA_STRING_VALUE_LENGTH + " characters) for key: " + key);
+                    }
+                } else if (value instanceof Number) {
+                    Number numValue = (Number) value;
+                    if (!Double.isFinite(numValue.doubleValue())) {
+                        throw new MemoryValidationException("Metadata numeric value is invalid for key: " + key);
+                    }
+                } else if (!(value instanceof Boolean)) {
+                    // Only allow String, Number, Boolean, and null values
+                    throw new MemoryValidationException("Unsupported metadata value type for key '" + key + "': " + value.getClass().getSimpleName());
+                }
+            }
+        }
     }
 }

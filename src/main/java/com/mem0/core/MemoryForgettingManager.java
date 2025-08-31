@@ -203,8 +203,8 @@ public class MemoryForgettingManager {
                 } else {
                     // Update memory strength based on decay
                     updateMemoryStrength(memory);
-                    processedMemories.add(memory);
                 }
+                processedMemories.add(memory);
             }
             
             return processedMemories;
@@ -355,7 +355,7 @@ public class MemoryForgettingManager {
         // Apply forgetting curve
         double decayScore = forgettingCurveBase * Math.exp(-combinedDecay / forgettingCurveDecay);
         
-        return 1.0 - decayScore; // Higher decay score means more likely to forget
+        return Math.min(1.0, 1.0 - decayScore); // Higher decay score means more likely to forget, capped at 1.0
     }
     
     private double calculateRetentionScore(EnhancedMemory memory) {

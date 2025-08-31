@@ -60,10 +60,28 @@ public class ImageProcessor implements ModalityProcessor {
             long startTime = System.currentTimeMillis();
             
             try {
+                // Check for null or empty content
+                if (content == null || content.length == 0) {
+                    logger.warn("Empty or null image content for file: {}", filePath);
+                    long processingTime = System.currentTimeMillis() - startTime;
+                    return new ModalityProcessResult("image", "", new HashMap<>(), new HashMap<>(), null, null, processingTime);
+                }
+                
                 // 解析图像
-                BufferedImage image = ImageIO.read(new ByteArrayInputStream(content));
+                BufferedImage image = null;
+                try {
+                    image = ImageIO.read(new ByteArrayInputStream(content));
+                } catch (Exception e) {
+                    logger.warn("Failed to read image data for file: {}, error: {}", filePath, e.getMessage());
+                }
+                
                 if (image == null) {
-                    throw new RuntimeException("Unable to read image: " + filePath);
+                    logger.warn("Unable to read image: {}, treating as invalid image", filePath);
+                    long processingTime = System.currentTimeMillis() - startTime;
+                    Map<String, Object> metadata = new HashMap<>();
+                    metadata.put("error", "Invalid image format");
+                    metadata.put("processingTime", processingTime);
+                    return new ModalityProcessResult("image", "", metadata, new HashMap<>(), null, null, processingTime);
                 }
                 
                 // 提取基本信息
@@ -104,8 +122,12 @@ public class ImageProcessor implements ModalityProcessor {
                 );
                 
             } catch (Exception e) {
-                logger.error("Error processing image: " + filePath, e);
-                throw new RuntimeException("Failed to process image", e);
+                logger.warn("Error processing image: {}, error: {}", filePath, e.getMessage());
+                long processingTime = System.currentTimeMillis() - startTime;
+                Map<String, Object> metadata = new HashMap<>();
+                metadata.put("error", e.getMessage());
+                metadata.put("processingTime", processingTime);
+                return new ModalityProcessResult("image", "", metadata, new HashMap<>(), null, null, processingTime);
             }
         });
     }
@@ -406,15 +428,100 @@ public class ImageProcessor implements ModalityProcessor {
      * @return 识别出的文字
      */
     private String performOCR(BufferedImage image) {
-        // 这里应该集成真正的OCR库（如Tesseract）
-        // 目前返回占位符文本
+        try {
+            // Check if Tesseract is available
+            Class.forName("net.sourceforge.tess4j.Tesseract");
+            
+            // 使用Tesseract进行OCR
+            net.sourceforge.tess4j.Tesseract tesseract = new net.sourceforge.tess4j.Tesseract();
+            
+            // 配置Tesseract
+            tesseract.setLanguage("chi_sim+eng"); // 支持中文和英文
+            tesseract.setPageSegMode(1); // 自动页面分割
+            tesseract.setOcrEngineMode(1); // 使用神经网络LSTM引擎
+            
+            // 预处理图像以提高OCR准确性
+            BufferedImage preprocessedImage = preprocessImageForOCR(image);
+            
+            // 执行OCR
+            String result = tesseract.doOCR(preprocessedImage);
+            
+            if (result != null && !result.trim().isEmpty()) {
+                // 清理OCR结果
+                String cleanedText = cleanOCRResult(result);
+                logger.debug("OCR extracted {} characters from image", cleanedText.length());
+                return cleanedText;
+            }
+            
+            return "";
+            
+        } catch (ClassNotFoundException e) {
+            logger.warn("Tesseract OCR library not available, skipping OCR processing");
+            return "";
+        } catch (UnsatisfiedLinkError | NoClassDefFoundError e) {
+            logger.warn("Tesseract native library not found, skipping OCR processing: {}", e.getMessage());
+            return "";
+        } catch (Exception e) {
+            logger.warn("OCR processing failed, falling back to basic text detection: {}", e.getMessage());
+            
+            // Fallback: 简单的文字区域检测
+            if (hasTextLikeRegions(image)) {
+                return "Text regions detected but OCR extraction failed. Please check Tesseract installation.";
+            }
+            
+            return "";
+        }
+    }
+    
+    /**
+     * 预处理图像以提高OCR准确性
+     */
+    private BufferedImage preprocessImageForOCR(BufferedImage image) {
+        // 转换为灰度图
+        BufferedImage grayImage = convertToGrayscale(image);
         
-        // 简单的文字区域检测
-        if (hasTextLikeRegions(image)) {
-            return "OCR text extraction placeholder - integrate Tesseract or similar OCR library";
+        // 调整图像大小以提高OCR效果
+        int targetWidth = Math.max(image.getWidth(), 300);
+        int targetHeight = Math.max(image.getHeight(), 300);
+        
+        if (image.getWidth() < targetWidth || image.getHeight() < targetHeight) {
+            double scaleX = (double) targetWidth / image.getWidth();
+            double scaleY = (double) targetHeight / image.getHeight();
+            double scale = Math.min(scaleX, scaleY);
+            
+            int newWidth = (int) (image.getWidth() * scale);
+            int newHeight = (int) (image.getHeight() * scale);
+            
+            BufferedImage scaledImage = new BufferedImage(newWidth, newHeight, BufferedImage.TYPE_BYTE_GRAY);
+            Graphics2D g2d = scaledImage.createGraphics();
+            
+            g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+            g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            
+            g2d.drawImage(grayImage, 0, 0, newWidth, newHeight, null);
+            g2d.dispose();
+            
+            return scaledImage;
         }
         
-        return "";
+        return grayImage;
+    }
+    
+    /**
+     * 清理OCR结果
+     */
+    private String cleanOCRResult(String ocrText) {
+        if (ocrText == null) return "";
+        
+        return ocrText
+            // 移除多余的空白字符
+            .replaceAll("\\s+", " ")
+            // 移除非打印字符
+            .replaceAll("[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]", "")
+            // 修正常见的OCR错误
+            .replace("0", "O") // 数字0误识别为字母O的情况
+            .replace("1", "l") // 数字1误识别为字母l的情况  
+            .trim();
     }
     
     /**

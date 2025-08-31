@@ -15,6 +15,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+import com.mem0.constants.MemoryConstants;
 
 /**
  * EnhancedMemoryService - 增强型内存服务
@@ -54,14 +55,14 @@ public class EnhancedMemoryService implements AutoCloseable {
     
     // In-memory cache for frequently accessed memories - using synchronized LinkedHashMap for efficient LRU
     private final Map<String, EnhancedMemory> memoryCache = Collections.synchronizedMap(
-        new LinkedHashMap<String, EnhancedMemory>(1000, 0.75f, true) {
+        new LinkedHashMap<String, EnhancedMemory>(MemoryConstants.DEFAULT_MEMORY_CACHE_SIZE, MemoryConstants.DEFAULT_CACHE_LOAD_FACTOR, true) {
             @Override
             protected boolean removeEldestEntry(Map.Entry<String, EnhancedMemory> eldest) {
                 return size() > maxCacheSize;
             }
         }
     );
-    private final int maxCacheSize = 1000;
+    private final int maxCacheSize = MemoryConstants.DEFAULT_MEMORY_CACHE_SIZE;
     
     /**
      * 构造增强型内存服务
@@ -427,8 +428,8 @@ public class EnhancedMemoryService implements AutoCloseable {
                 List<LLMProvider.ChatMessage> messages = chatPromptTemplate.buildChatMessages(context);
                 
                 LLMProvider.LLMConfig llmConfig = new LLMProvider.LLMConfig();
-                llmConfig.setMaxTokens(1000);
-                llmConfig.setTemperature(0.7);
+                llmConfig.setMaxTokens(MemoryConstants.DEFAULT_LLM_MAX_TOKENS);
+                llmConfig.setTemperature(MemoryConstants.DEFAULT_LLM_TEMPERATURE);
                 
                 return llmProvider.generateChatCompletion(messages, llmConfig)
                     .thenApply(response -> {
@@ -772,8 +773,8 @@ public class EnhancedMemoryService implements AutoCloseable {
         messages.add(new LLMProvider.ChatMessage(LLMProvider.ChatMessage.Role.USER, query));
         
         LLMProvider.LLMConfig config = new LLMProvider.LLMConfig();
-        config.setMaxTokens(500);
-        config.setTemperature(0.7);
+        config.setMaxTokens(MemoryConstants.MEMORY_ENHANCEMENT_MAX_TOKENS);
+        config.setTemperature(MemoryConstants.DEFAULT_LLM_TEMPERATURE);
         
         return llmProvider.generateChatCompletion(messages, config)
             .thenApply(LLMProvider.LLMResponse::getContent);

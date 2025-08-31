@@ -9,8 +9,8 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
-import java.util.logging.Logger;
-import java.util.logging.Level;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 内存图存储实现，支持增强型内存管理
@@ -22,7 +22,7 @@ import java.util.logging.Level;
  */
 public class InMemoryGraphStore implements GraphStore {
     
-    private static final Logger logger = Logger.getLogger(InMemoryGraphStore.class.getName());
+    private static final Logger logger = LoggerFactory.getLogger(InMemoryGraphStore.class);
     
     // Graph storage
     private final Map<String, Map<String, Object>> nodes = new ConcurrentHashMap<>();
@@ -54,12 +54,19 @@ public class InMemoryGraphStore implements GraphStore {
                 
                 // Add to user memories index
                 String userId = memory.getUserId();
-                userMemories.computeIfAbsent(userId, k -> ConcurrentHashMap.newKeySet()).add(memoryId);
+                userMemories.compute(userId, (k, v) -> {
+                    Set<String> userMems = v;
+                    if (userMems == null) {
+                        userMems = ConcurrentHashMap.newKeySet();
+                    }
+                    userMems.add(memoryId);
+                    return userMems;
+                });
                 
-                logger.log(Level.FINE, "Memory added successfully: " + memoryId);
+                logger.debug("Memory added successfully: {}", memoryId);
                 return null;
             } catch (Exception e) {
-                logger.log(Level.SEVERE, "Failed to add memory: " + memoryId, e);
+                logger.error("Failed to add memory: {}", memoryId, e);
                 throw new RuntimeException("Failed to add memory", e);
             }
         });
@@ -90,10 +97,10 @@ public class InMemoryGraphStore implements GraphStore {
             
             try {
                 memories.put(memoryId, memory);
-                logger.log(Level.FINE, "Memory updated successfully: " + memoryId);
+                logger.debug("Memory updated successfully: {}", memoryId);
                 return null;
             } catch (Exception e) {
-                logger.log(Level.SEVERE, "Failed to update memory: " + memoryId, e);
+                logger.error("Failed to update memory: {}", memoryId, e);
                 throw new RuntimeException("Failed to update memory", e);
             }
         });
@@ -118,10 +125,10 @@ public class InMemoryGraphStore implements GraphStore {
                     memoryRelationships.remove(memoryId);
                 }
                 
-                logger.log(Level.FINE, "Memory deleted successfully: " + memoryId);
+                logger.debug("Memory deleted successfully: {}", memoryId);
                 return null;
             } catch (Exception e) {
-                logger.log(Level.SEVERE, "Failed to delete memory: " + memoryId, e);
+                logger.error("Failed to delete memory: {}", memoryId, e);
                 throw new RuntimeException("Failed to delete memory", e);
             }
         });
@@ -206,13 +213,27 @@ public class InMemoryGraphStore implements GraphStore {
                 relationships.put(relationshipId, relationship);
                 
                 // Add to memory relationships index
-                memoryRelationships.computeIfAbsent(fromMemoryId, k -> ConcurrentHashMap.newKeySet()).add(relationshipId);
-                memoryRelationships.computeIfAbsent(toMemoryId, k -> ConcurrentHashMap.newKeySet()).add(relationshipId);
+                memoryRelationships.compute(fromMemoryId, (k, v) -> {
+                    Set<String> rels = v;
+                    if (rels == null) {
+                        rels = ConcurrentHashMap.newKeySet();
+                    }
+                    rels.add(relationshipId);
+                    return rels;
+                });
+                memoryRelationships.compute(toMemoryId, (k, v) -> {
+                    Set<String> rels = v;
+                    if (rels == null) {
+                        rels = ConcurrentHashMap.newKeySet();
+                    }
+                    rels.add(relationshipId);
+                    return rels;
+                });
                 
-                logger.log(Level.FINE, "Memory relationship added: " + relationshipId);
+                logger.debug("Memory relationship added: {}", relationshipId);
                 return null;
             } catch (Exception e) {
-                logger.log(Level.SEVERE, "Failed to add memory relationship", e);
+                logger.error("Failed to add memory relationship", e);
                 throw new RuntimeException("Failed to add memory relationship", e);
             }
         });
@@ -366,9 +387,282 @@ public class InMemoryGraphStore implements GraphStore {
     @Override
     public CompletableFuture<List<Map<String, Object>>> executeQuery(String cypher, Map<String, Object> parameters) {
         return CompletableFuture.supplyAsync(() -> {
-            // Simplified implementation
-            return Collections.emptyList();
+            try {
+                if (cypher == null || cypher.trim().isEmpty()) {
+                    logger.warn("Empty Cypher query received, returning empty result");
+                    return Collections.emptyList();
+                }
+                
+                String normalizedQuery = cypher.trim().toUpperCase();
+                Map<String, Object> params = parameters != null ? parameters : new HashMap<>();
+                
+                // Basic Cypher query parsing and execution
+                if (normalizedQuery.startsWith("MATCH")) {
+                    return executeMatchQuery(cypher, params);
+                } else if (normalizedQuery.startsWith("CREATE")) {
+                    return executeCreateQuery(cypher, params);
+                } else if (normalizedQuery.startsWith("DELETE")) {
+                    return executeDeleteQuery(cypher, params);
+                } else if (normalizedQuery.startsWith("RETURN")) {
+                    return executeReturnQuery(cypher, params);
+                } else {
+                    logger.warn("Unsupported Cypher query type: {}", cypher);
+                    return Collections.emptyList();
+                }
+            } catch (Exception e) {
+                logger.error("Error executing Cypher query: {}", cypher, e);
+                throw new RuntimeException("Failed to execute Cypher query", e);
+            }
         });
+    }
+    
+    private List<Map<String, Object>> executeMatchQuery(String cypher, Map<String, Object> parameters) {
+        List<Map<String, Object>> results = new ArrayList<>();
+        
+        try {
+            // Simple MATCH pattern parsing
+            // Support basic patterns like: MATCH (n) RETURN n
+            // or MATCH (n:Label) WHERE n.property = value RETURN n
+            
+            if (cypher.contains("RETURN")) {
+                String[] parts = cypher.split("RETURN");
+                String matchPart = parts[0].trim();
+                String returnPart = parts[1].trim();
+                
+                // Parse node label from match part
+                String targetLabel = extractLabelFromMatch(matchPart);
+                Map<String, Object> whereConditions = extractWhereConditions(cypher, parameters);
+                
+                // Find matching nodes
+                for (Map.Entry<String, Map<String, Object>> entry : nodes.entrySet()) {
+                    String nodeId = entry.getKey();
+                    Map<String, Object> nodeProps = entry.getValue();
+                    
+                    // Check label match
+                    if (targetLabel != null && !targetLabel.equals(nodeProps.get("label"))) {
+                        continue;
+                    }
+                    
+                    // Check where conditions
+                    if (!matchesWhereConditions(nodeProps, whereConditions)) {
+                        continue;
+                    }
+                    
+                    // Build result based on return clause
+                    Map<String, Object> result = buildReturnResult(nodeId, nodeProps, returnPart);
+                    results.add(result);
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error in MATCH query execution", e);
+        }
+        
+        return results;
+    }
+    
+    private List<Map<String, Object>> executeCreateQuery(String cypher, Map<String, Object> parameters) {
+        // Basic CREATE node support
+        // CREATE (n:Label {property: value})
+        try {
+            String label = extractLabelFromCreate(cypher);
+            Map<String, Object> properties = extractPropertiesFromCreate(cypher, parameters);
+            
+            if (label != null) {
+                properties.put("label", label);
+                createNode(label, properties).get();
+                
+                // CREATE queries without RETURN clause should return empty results
+                return Collections.emptyList();
+            }
+        } catch (Exception e) {
+            logger.error("Error in CREATE query execution", e);
+        }
+        
+        return Collections.emptyList();
+    }
+    
+    private List<Map<String, Object>> executeDeleteQuery(String cypher, Map<String, Object> parameters) {
+        // Basic DELETE support
+        // DELETE n WHERE n.id = value
+        try {
+            Map<String, Object> whereConditions = extractWhereConditions(cypher, parameters);
+            int deletedCount = 0;
+            
+            List<String> toDelete = new ArrayList<>();
+            for (Map.Entry<String, Map<String, Object>> entry : nodes.entrySet()) {
+                if (matchesWhereConditions(entry.getValue(), whereConditions)) {
+                    toDelete.add(entry.getKey());
+                }
+            }
+            
+            for (String nodeId : toDelete) {
+                deleteNode(nodeId).get();
+                deletedCount++;
+            }
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("deletedNodes", deletedCount);
+            
+            return Collections.singletonList(result);
+        } catch (Exception e) {
+            logger.error("Error in DELETE query execution", e);
+        }
+        
+        return Collections.emptyList();
+    }
+    
+    private List<Map<String, Object>> executeReturnQuery(String cypher, Map<String, Object> parameters) {
+        // Simple RETURN query for constants
+        try {
+            String returnPart = cypher.substring(6).trim(); // Remove "RETURN"
+            
+            Map<String, Object> result = new HashMap<>();
+            
+            // Parse simple return expressions
+            if (returnPart.contains("\"") || returnPart.contains("'")) {
+                // String literal
+                String value = returnPart.replaceAll("[\"']", "");
+                result.put("value", value);
+            } else if (returnPart.matches("\\d+")) {
+                // Number literal
+                result.put("value", Integer.parseInt(returnPart));
+            } else {
+                // Parameter or expression
+                result.put("expression", returnPart);
+            }
+            
+            return Collections.singletonList(result);
+        } catch (Exception e) {
+            logger.error("Error in RETURN query execution", e);
+        }
+        
+        return Collections.emptyList();
+    }
+    
+    private String extractLabelFromMatch(String matchPart) {
+        // Extract label from patterns like (n:Label) or (n:Label {prop: value})
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("\\([^)]*:([^\\s})]+)");
+        java.util.regex.Matcher matcher = pattern.matcher(matchPart);
+        return matcher.find() ? matcher.group(1) : null;
+    }
+    
+    private String extractLabelFromCreate(String cypher) {
+        // Extract label from CREATE (n:Label {prop: value})
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("\\([^)]*:([^\\s}]+)");
+        java.util.regex.Matcher matcher = pattern.matcher(cypher);
+        return matcher.find() ? matcher.group(1) : null;
+    }
+    
+    private Map<String, Object> extractWhereConditions(String cypher, Map<String, Object> parameters) {
+        Map<String, Object> conditions = new HashMap<>();
+        
+        if (cypher.toUpperCase().contains("WHERE")) {
+            try {
+                String[] parts = cypher.toUpperCase().split("WHERE");
+                if (parts.length > 1) {
+                    String wherePart = parts[1].split("RETURN")[0].trim();
+                    
+                    // Simple condition parsing: n.property = value or n.property = $param
+                    java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("(\\w+)\\.(\\w+)\\s*=\\s*([^\\s]+)");
+                    java.util.regex.Matcher matcher = pattern.matcher(wherePart);
+                    
+                    while (matcher.find()) {
+                        String property = matcher.group(2);
+                        String value = matcher.group(3);
+                        
+                        if (value.startsWith("$")) {
+                            // Parameter reference
+                            String paramName = value.substring(1);
+                            if (parameters.containsKey(paramName)) {
+                                conditions.put(property, parameters.get(paramName));
+                            }
+                        } else {
+                            // Literal value
+                            conditions.put(property, value.replaceAll("[\"']", ""));
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                logger.warn("Error parsing WHERE conditions", e);
+            }
+        }
+        
+        return conditions;
+    }
+    
+    private Map<String, Object> extractPropertiesFromCreate(String cypher, Map<String, Object> parameters) {
+        Map<String, Object> properties = new HashMap<>();
+        
+        try {
+            // Extract properties from CREATE (n:Label {prop1: value1, prop2: $param2})
+            int start = cypher.indexOf("{");
+            int end = cypher.lastIndexOf("}");
+            
+            if (start >= 0 && end > start) {
+                String propsPart = cypher.substring(start + 1, end);
+                
+                // Simple property parsing
+                String[] props = propsPart.split(",");
+                for (String prop : props) {
+                    String[] keyValue = prop.split(":");
+                    if (keyValue.length == 2) {
+                        String key = keyValue[0].trim();
+                        String value = keyValue[1].trim();
+                        
+                        if (value.startsWith("$")) {
+                            // Parameter reference
+                            String paramName = value.substring(1);
+                            if (parameters.containsKey(paramName)) {
+                                properties.put(key, parameters.get(paramName));
+                            }
+                        } else {
+                            // Literal value
+                            properties.put(key, value.replaceAll("[\"']", ""));
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Error parsing CREATE properties", e);
+        }
+        
+        return properties;
+    }
+    
+    private boolean matchesWhereConditions(Map<String, Object> nodeProps, Map<String, Object> conditions) {
+        for (Map.Entry<String, Object> condition : conditions.entrySet()) {
+            Object nodeValue = nodeProps.get(condition.getKey());
+            Object conditionValue = condition.getValue();
+            
+            if (!Objects.equals(nodeValue, conditionValue)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    private Map<String, Object> buildReturnResult(String nodeId, Map<String, Object> nodeProps, String returnPart) {
+        Map<String, Object> result = new HashMap<>();
+        
+        if ("n".equals(returnPart.trim()) || "*".equals(returnPart.trim())) {
+            // Return entire node
+            result.put("id", nodeId);
+            result.putAll(nodeProps);
+        } else {
+            // Return specific properties
+            String[] returnFields = returnPart.split(",");
+            for (String field : returnFields) {
+                field = field.trim();
+                if (field.startsWith("n.")) {
+                    String propName = field.substring(2);
+                    result.put(propName, nodeProps.get(propName));
+                } else {
+                    result.put(field, nodeProps.get(field));
+                }
+            }
+        }
+        
+        return result;
     }
     
     @Override
@@ -380,10 +674,10 @@ public class InMemoryGraphStore implements GraphStore {
                 memories.clear();
                 userMemories.clear();
                 memoryRelationships.clear();
-                logger.log(Level.INFO, "InMemoryGraphStore closed successfully");
+                logger.info("InMemoryGraphStore closed successfully");
                 return null;
             } catch (Exception e) {
-                logger.log(Level.SEVERE, "Error closing InMemoryGraphStore", e);
+                logger.error("Error closing InMemoryGraphStore", e);
                 throw new RuntimeException("Failed to close graph store", e);
             }
         });

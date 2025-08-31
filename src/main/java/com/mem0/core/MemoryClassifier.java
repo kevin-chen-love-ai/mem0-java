@@ -100,7 +100,7 @@ public class MemoryClassifier {
         
         CLASSIFICATION_PATTERNS.put(MemoryType.TEMPORAL, Arrays.asList(
             Pattern.compile(".*\\b(?:schedule|appointment|meeting|deadline|reminder)\\b.*", Pattern.CASE_INSENSITIVE),
-            Pattern.compile(".*\\b(?:today|tomorrow|yesterday|next \\w+|last \\w+)\\b.*", Pattern.CASE_INSENSITIVE),
+            Pattern.compile(".*\\b(?:today|tomorrow|next \\w+)\\b.*", Pattern.CASE_INSENSITIVE),
             Pattern.compile(".*\\b\\d{4}-\\d{2}-\\d{2}\\b.*"), // Date pattern
             Pattern.compile(".*\\b\\d{1,2}:\\d{2}\\s*(?:AM|PM)?\\b.*", Pattern.CASE_INSENSITIVE) // Time pattern
         ));
@@ -139,6 +139,11 @@ public class MemoryClassifier {
      * @throws IllegalArgumentException 如枟content为null或空 / if content is null or empty
      */
     public CompletableFuture<MemoryType> classifyMemory(String content, Map<String, Object> context) {
+        // Handle null or empty content
+        if (content == null || content.trim().isEmpty()) {
+            return CompletableFuture.completedFuture(MemoryType.SEMANTIC);
+        }
+        
         if (useLLMClassification && llmProvider != null) {
             return classifyWithLLM(content, context);
         } else {
@@ -222,20 +227,30 @@ public class MemoryClassifier {
      * @return 分类结果 / Classification result
      */
     private MemoryType classifyWithRules(String content, Map<String, Object> context) {
-        String lowerContent = content.toLowerCase();
-        
-        // Check for explicit temporal information
-        if (containsTemporalInfo(content) || hasTemporalContext(context)) {
-            return MemoryType.TEMPORAL;
+        // Handle null or empty content
+        if (content == null || content.trim().isEmpty()) {
+            return MemoryType.SEMANTIC;
         }
         
-        // Check patterns for different types
+        String lowerContent = content.toLowerCase();
+        
+        // Check patterns for different types first (more specific patterns)
         for (Map.Entry<MemoryType, List<Pattern>> entry : CLASSIFICATION_PATTERNS.entrySet()) {
             for (Pattern pattern : entry.getValue()) {
                 if (pattern.matcher(content).matches()) {
                     return entry.getKey();
                 }
             }
+        }
+        
+        // Check for episodic patterns (personal experiences, past events) - before temporal
+        if (containsEpisodicInfo(content)) {
+            return MemoryType.EPISODIC;
+        }
+        
+        // Check for factual patterns (numbers, specific facts) - before procedural
+        if (containsFactualInfo(content)) {
+            return MemoryType.FACTUAL;
         }
         
         // Check keywords
@@ -251,14 +266,9 @@ public class MemoryClassifier {
             return MemoryType.RELATIONSHIP;
         }
         
-        // Check for factual patterns (numbers, specific facts)
-        if (containsFactualInfo(content)) {
-            return MemoryType.FACTUAL;
-        }
-        
-        // Check for episodic patterns (personal experiences, past events)
-        if (containsEpisodicInfo(content)) {
-            return MemoryType.EPISODIC;
+        // Check for explicit temporal information (schedules, appointments) - after episodic
+        if (containsTemporalInfo(content) || hasTemporalContext(context)) {
+            return MemoryType.TEMPORAL;
         }
         
         // Default to semantic
@@ -455,8 +465,37 @@ public class MemoryClassifier {
                     logger.warn("LLM response is null, falling back to rules");
                     return classifyWithRules(content, context);
                 }
-                String classification = response.getContent().toLowerCase().trim();
-                MemoryType type = MemoryType.fromValue(classification);
+                String responseContent = response.getContent().toLowerCase().trim();
+                
+                // Try to extract memory type from response
+                MemoryType type = null;
+                
+                // First try exact match
+                type = MemoryType.fromValue(responseContent);
+                
+                // If exact match returns default (SEMANTIC), try to find type in the response
+                if (type == MemoryType.SEMANTIC && !responseContent.equals("semantic")) {
+                    logger.debug("Exact match returned SEMANTIC, checking for type names in response: '{}'", responseContent);
+                    for (MemoryType memoryType : MemoryType.values()) {
+                        String nameLower = memoryType.name().toLowerCase();
+                        String valueLower = memoryType.getValue().toLowerCase();
+                        logger.debug("Checking for '{}' (name: '{}', value: '{}') in response: '{}'", 
+                                   memoryType, nameLower, valueLower, responseContent);
+                        if (responseContent.contains(nameLower) || responseContent.contains(valueLower)) {
+                            type = memoryType;
+                            logger.debug("Found match for type: {}", memoryType);
+                            break;
+                        }
+                    }
+                }
+                
+                if (type == null) {
+                    logger.warn("Could not parse LLM response: {}, falling back to rules", responseContent);
+                    return classifyWithRules(content, context);
+                }
+                
+                logger.debug("Successfully parsed LLM response '{}' to type: {}", responseContent, type);
+                
                 logger.debug("LLM classified '{}' as {}", 
                     content.substring(0, Math.min(50, content.length())), type);
                 return type;
@@ -654,9 +693,35 @@ public class MemoryClassifier {
      * @return true如果包含时间信息 / true if contains temporal information
      */
     private boolean containsTemporalInfo(String content) {
-        return containsKeywords(content.toLowerCase(), TEMPORAL_KEYWORDS) ||
-               content.matches(".*\\b\\d{4}-\\d{2}-\\d{2}\\b.*") ||
-               content.matches(".*\\b\\d{1,2}:\\d{2}\\s*(?:AM|PM)?\\b.*");
+        String lowerContent = content.toLowerCase();
+        
+        // Check for schedule/appointment specific keywords
+        boolean hasScheduleKeywords = lowerContent.contains("schedule") || 
+                                    lowerContent.contains("appointment") || 
+                                    lowerContent.contains("meeting") || 
+                                    lowerContent.contains("deadline") || 
+                                    lowerContent.contains("reminder") || 
+                                    lowerContent.contains("calendar");
+        
+        // Check for specific time patterns
+        boolean hasTimePatterns = content.matches(".*\\b\\d{4}-\\d{2}-\\d{2}\\b.*") ||
+                                 content.matches(".*\\b\\d{1,2}:\\d{2}\\s*(?:AM|PM)?\\b.*");
+        
+        // Check for future-oriented temporal references (not past events)
+        boolean hasFutureTemporal = lowerContent.contains("tomorrow") || 
+                                   lowerContent.contains("next week") || 
+                                   lowerContent.contains("next month") || 
+                                   lowerContent.contains("scheduled for") ||
+                                   lowerContent.contains("due on") ||
+                                   lowerContent.contains("every monday") ||
+                                   lowerContent.contains("every tuesday") ||
+                                   lowerContent.contains("every wednesday") ||
+                                   lowerContent.contains("every thursday") ||
+                                   lowerContent.contains("every friday") ||
+                                   lowerContent.contains("every saturday") ||
+                                   lowerContent.contains("every sunday");
+        
+        return hasScheduleKeywords || hasTimePatterns || hasFutureTemporal;
     }
     
     /**
@@ -708,11 +773,24 @@ public class MemoryClassifier {
      * @return true如果包含事实信息 / true if contains factual information
      */
     private boolean containsFactualInfo(String content) {
+        String lowerContent = content.toLowerCase();
         // Check for numbers, measurements, specific data
         return content.matches(".*\\b\\d+(?:\\.\\d+)?\\s*(?:%|percent|kg|km|miles|dollars?|USD|EUR)\\b.*") ||
                content.matches(".*\\b\\d{4}\\b.*") || // Years
                content.contains("fact:") ||
-               content.contains("data:");
+               content.contains("data:") ||
+               lowerContent.contains("was created by") ||
+               lowerContent.contains("was founded by") ||
+               lowerContent.contains("was invented by") ||
+               lowerContent.contains("was developed by") ||
+               lowerContent.contains("is the capital of") ||
+               lowerContent.contains("is located in") ||
+               lowerContent.contains("was established in") ||
+               lowerContent.contains("complexity is") ||
+               lowerContent.contains("algorithm complexity") ||
+               lowerContent.contains("o(n") ||
+               lowerContent.contains("o(") ||
+               lowerContent.contains("big o");
     }
     
     /**
@@ -731,7 +809,12 @@ public class MemoryClassifier {
                lowerContent.contains("last time") ||
                lowerContent.contains("when i") ||
                lowerContent.contains("experience") ||
-               lowerContent.matches(".*\\b(?:yesterday|last week|last month|ago)\\b.*");
+               lowerContent.contains("went to") ||
+               lowerContent.contains("attended") ||
+               lowerContent.contains("visited") ||
+               lowerContent.contains("i attended") ||
+               lowerContent.matches(".*\\b(?:yesterday|last week|last month|ago)\\b.*") ||
+               lowerContent.matches(".*\\b(?:i went|i visited|i attended|i saw|i met)\\b.*");
     }
     
     /**

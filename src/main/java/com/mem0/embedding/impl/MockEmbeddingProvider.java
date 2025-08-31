@@ -89,7 +89,7 @@ public class MockEmbeddingProvider implements EmbeddingProvider {
     
     private static final Logger logger = LoggerFactory.getLogger(MockEmbeddingProvider.class);
     
-    private final int dimension = 128; // 测试用的较小维度
+    private final int dimension = 1536; // 匹配测试期望的维度
     
     @Override
     public CompletableFuture<List<Float>> embed(String text) {
@@ -102,6 +102,14 @@ public class MockEmbeddingProvider implements EmbeddingProvider {
                 // 生成基于文本特征的简单向量
                 float value = (float) (baseValue + Math.sin(i * 0.1) * 0.1 + (text.hashCode() % 1000) / 10000.0);
                 vector.add(value);
+            }
+            
+            // 归一化为单位向量
+            double magnitude = Math.sqrt(vector.stream().mapToDouble(f -> f * f).sum());
+            if (magnitude > 0) {
+                for (int i = 0; i < vector.size(); i++) {
+                    vector.set(i, (float) (vector.get(i) / magnitude));
+                }
             }
             
             return vector;

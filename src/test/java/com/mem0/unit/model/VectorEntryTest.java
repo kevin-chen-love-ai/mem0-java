@@ -276,7 +276,7 @@ public class VectorEntryTest {
             retrievedEmbedding[1] = 888.0f;
             
             float[] retrievedAgain = entry.getEmbedding();
-            assertEquals(888.0f, retrievedAgain[1], 0.001f); // 实际上会被修改，因为返回的是同一个引用
+            assertNotEquals(888.0f, retrievedAgain[1], 0.001f); // 不应该被修改，因为返回的是副本
         }
     }
     
@@ -423,7 +423,8 @@ public class VectorEntryTest {
             
             // 验证public final字段
             assertEquals(id, entry.id);
-            assertSame(embedding, entry.embedding);
+            assertNotSame(embedding, entry.embedding); // 由于不可变性，应该是不同的引用
+            assertArrayEquals(embedding, entry.embedding, 0.001f); // 但内容应该相同
             assertEquals(userId, entry.userId);
             assertSame(properties, entry.properties);
         }

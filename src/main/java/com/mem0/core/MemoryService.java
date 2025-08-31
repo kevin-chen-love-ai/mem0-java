@@ -318,7 +318,7 @@ public class MemoryService {
     private VectorStore createVectorStore(Mem0Config.VectorStoreConfig config) {
         switch (config.getProvider().toLowerCase()) {
             case "milvus":
-                return new MilvusVectorStore(config.getHost(), config.getPort(), config.getToken());
+                return new MilvusVectorStore(config.getHost()+":"+config.getPort());
             default:
                 throw new IllegalArgumentException("Unsupported vector store provider: " + config.getProvider());
         }

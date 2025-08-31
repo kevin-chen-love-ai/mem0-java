@@ -1,6 +1,7 @@
 package com.mem0.embedding.impl;
 
 import com.mem0.embedding.EmbeddingProvider;
+import com.mem0.security.SecureString;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -67,12 +68,12 @@ import java.util.concurrent.TimeUnit;
  * </pre>
  * 
  * 注意事项 / Important Notes:
- * - 当前为占位符实现，返回零向量用于测试
- * - 实际部署需要集成真实的OpenAI API
- * - 需要处理API限制和计费考虑
- * - Currently a placeholder implementation returning zero vectors for testing
- * - Production deployment requires real OpenAI API integration
- * - Need to handle API limits and billing considerations
+ * - 生产就绪的OpenAI API集成实现
+ * - 支持重试机制和错误处理
+ * - 需要有效的OpenAI API密钥
+ * - Production-ready OpenAI API integration implementation
+ * - Supports retry mechanism and error handling
+ * - Requires valid OpenAI API key
  * 
  * @author kevin.chen
  * @version 1.0
@@ -89,7 +90,7 @@ public class OpenAIEmbeddingProvider implements EmbeddingProvider {
     private static final int DEFAULT_MAX_RETRIES = 3;
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     
-    private final String apiKey;
+    private final SecureString apiKey;
     private final String apiUrl;
     private final String model;
     private final int dimension;
@@ -115,7 +116,8 @@ public class OpenAIEmbeddingProvider implements EmbeddingProvider {
             throw new IllegalArgumentException("API key cannot be null or empty");
         }
         
-        this.apiKey = apiKey.trim();
+        // Store API key securely
+        this.apiKey = new SecureString(apiKey.trim());
         this.apiUrl = apiUrl != null ? apiUrl : DEFAULT_API_URL;
         this.model = model != null ? model : DEFAULT_MODEL;
         this.dimension = dimension > 0 ? dimension : DEFAULT_DIMENSION;
@@ -186,7 +188,7 @@ public class OpenAIEmbeddingProvider implements EmbeddingProvider {
         Request httpRequest = new Request.Builder()
                 .url(apiUrl)
                 .post(body)
-                .addHeader("Authorization", "Bearer " + apiKey)
+                .addHeader("Authorization", "Bearer " + apiKey.getValue())
                 .addHeader("Content-Type", "application/json")
                 .build();
         
@@ -273,6 +275,12 @@ public class OpenAIEmbeddingProvider implements EmbeddingProvider {
         try {
             httpClient.dispatcher().executorService().shutdown();
             httpClient.connectionPool().evictAll();
+            
+            // Clear sensitive data
+            if (apiKey != null) {
+                apiKey.close();
+            }
+            
             logger.info("OpenAI嵌入提供者已关闭");
         } catch (Exception e) {
             logger.warn("Error closing OpenAI embedding provider", e);

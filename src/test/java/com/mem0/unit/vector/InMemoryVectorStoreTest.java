@@ -3,6 +3,7 @@ package com.mem0.unit.vector;
 import com.mem0.vector.impl.InMemoryVectorStore;
 import com.mem0.store.VectorStore;
 import com.mem0.model.SearchResult;
+import com.mem0.exception.MemoryValidationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
@@ -534,10 +535,11 @@ public class InMemoryVectorStoreTest {
             List<Float> emptyVector = Collections.emptyList();
             Map<String, Object> metadata = createTestMetadata();
             
-            assertDoesNotThrow(() -> {
-                String id = vectorStore.insert(TEST_COLLECTION, emptyVector, metadata).get();
-                assertNotNull(id);
+            ExecutionException exception = assertThrows(ExecutionException.class, () -> {
+                vectorStore.insert(TEST_COLLECTION, emptyVector, metadata).get();
             });
+            
+            assertTrue(exception.getCause() instanceof MemoryValidationException);
         }
         
         @Test

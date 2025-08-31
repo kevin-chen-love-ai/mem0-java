@@ -65,7 +65,15 @@ public class GraphNode {
     public GraphNode(String id, String type, Map<String, Object> properties) {
         this.id = id;
         this.type = type;
-        this.properties = new ConcurrentHashMap<>(properties != null ? properties : new ConcurrentHashMap<>());
+        this.properties = new ConcurrentHashMap<>();
+        if (properties != null) {
+            // Filter out null values since ConcurrentHashMap doesn't allow them
+            properties.forEach((key, value) -> {
+                if (value != null) {
+                    this.properties.put(key, value);
+                }
+            });
+        }
         this.lastAccessTime = System.currentTimeMillis();
     }
 

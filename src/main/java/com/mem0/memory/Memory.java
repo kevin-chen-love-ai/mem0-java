@@ -125,7 +125,12 @@ public class Memory {
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
     
-    public Map<String, Object> getMetadata() { return metadata; }
+    public Map<String, Object> getMetadata() { 
+        if (metadata == null) {
+            metadata = new java.util.HashMap<>();
+        }
+        return metadata; 
+    }
     public void setMetadata(Map<String, Object> metadata) { 
         this.metadata = metadata; 
         this.updatedAt = Instant.now();

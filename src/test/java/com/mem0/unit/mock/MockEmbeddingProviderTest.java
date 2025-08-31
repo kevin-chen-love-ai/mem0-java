@@ -22,7 +22,7 @@ public class MockEmbeddingProviderTest {
     
     @Test
     void testGetDimensions() {
-        assertEquals(128, embeddingProvider.getDimension());
+        assertEquals(1536, embeddingProvider.getDimension());
     }
     
     @Test

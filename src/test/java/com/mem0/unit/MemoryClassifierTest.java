@@ -1,12 +1,15 @@
-package com.mem0.core;
+package com.mem0.unit;
 
+import com.mem0.core.MemoryClassifier;
+import com.mem0.core.MemoryType;
 import com.mem0.llm.LLMProvider;
-import com.mem0.llm.LLMResponse;
+// import com.mem0.llm.LLMResponse; // Remove this import
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -38,15 +41,15 @@ public class MemoryClassifierTest {
         String content = "The capital of France is Paris";
         
         // Mock LLM response for factual memory
-        LLMResponse mockResponse = new LLMResponse("FACTUAL", "mock-model", 10, 100L, null);
-        when(llmProvider.generate(anyString(), anyDouble(), anyInt()))
+        LLMProvider.LLMResponse mockResponse = new LLMProvider.LLMResponse("FACTUAL", 10, "mock-model", "stop");
+        when(llmProvider.generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class)))
                 .thenAnswer(invocation -> CompletableFuture.completedFuture(mockResponse));
         
         java.util.Map<String, Object> context = new java.util.HashMap<>();
         MemoryType result = classifier.classifyMemory(content, context).get();
         
         assertEquals(MemoryType.FACTUAL, result);
-        verify(llmProvider, times(1)).generate(anyString(), anyDouble(), anyInt());
+        verify(llmProvider, times(1)).generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class));
     }
     
     @Test
@@ -54,15 +57,15 @@ public class MemoryClassifierTest {
         String content = "I went to the store yesterday and bought groceries";
         
         // Mock LLM response for episodic memory
-        LLMResponse mockResponse = new LLMResponse("EPISODIC", "mock-model", 10, 100L, null);
-        when(llmProvider.generate(anyString(), anyDouble(), anyInt()))
+        LLMProvider.LLMResponse mockResponse = new LLMProvider.LLMResponse("EPISODIC", 10, "mock-model", "stop");
+        when(llmProvider.generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class)))
                 .thenAnswer(invocation -> CompletableFuture.completedFuture(mockResponse));
         
         java.util.Map<String, Object> context = new java.util.HashMap<>();
         MemoryType result = classifier.classifyMemory(content, context).get();
         
         assertEquals(MemoryType.EPISODIC, result);
-        verify(llmProvider, times(1)).generate(anyString(), anyDouble(), anyInt());
+        verify(llmProvider, times(1)).generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class));
     }
     
     @Test
@@ -70,15 +73,15 @@ public class MemoryClassifierTest {
         String content = "To compile Java code, run javac followed by the filename";
         
         // Mock LLM response for procedural memory
-        LLMResponse mockResponse = new LLMResponse("PROCEDURAL", "mock-model", 10, 100L, null);
-        when(llmProvider.generate(anyString(), anyDouble(), anyInt()))
+        LLMProvider.LLMResponse mockResponse = new LLMProvider.LLMResponse("PROCEDURAL", 10, "mock-model", "stop");
+        when(llmProvider.generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class)))
                 .thenAnswer(invocation -> CompletableFuture.completedFuture(mockResponse));
         
         java.util.Map<String, Object> context = new java.util.HashMap<>();
         MemoryType result = classifier.classifyMemory(content, context).get();
         
         assertEquals(MemoryType.PROCEDURAL, result);
-        verify(llmProvider, times(1)).generate(anyString(), anyDouble(), anyInt());
+        verify(llmProvider, times(1)).generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class));
     }
     
     @Test
@@ -86,15 +89,15 @@ public class MemoryClassifierTest {
         String content = "I prefer tea over coffee in the morning";
         
         // Mock LLM response for preference memory
-        LLMResponse mockResponse = new LLMResponse("PREFERENCE", "mock-model", 10, 100L, null);
-        when(llmProvider.generate(anyString(), anyDouble(), anyInt()))
+        LLMProvider.LLMResponse mockResponse = new LLMProvider.LLMResponse("PREFERENCE", 10, "mock-model", "stop");
+        when(llmProvider.generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class)))
                 .thenAnswer(invocation -> CompletableFuture.completedFuture(mockResponse));
         
         java.util.Map<String, Object> context = new java.util.HashMap<>();
         MemoryType result = classifier.classifyMemory(content, context).get();
         
         assertEquals(MemoryType.PREFERENCE, result);
-        verify(llmProvider, times(1)).generate(anyString(), anyDouble(), anyInt());
+        verify(llmProvider, times(1)).generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class));
     }
     
     @Test
@@ -102,15 +105,15 @@ public class MemoryClassifierTest {
         String content = "Machine learning is a subset of artificial intelligence";
         
         // Mock LLM response for semantic memory
-        LLMResponse mockResponse = new LLMResponse("SEMANTIC", "mock-model", 10, 100L, null);
-        when(llmProvider.generate(anyString(), anyDouble(), anyInt()))
+        LLMProvider.LLMResponse mockResponse = new LLMProvider.LLMResponse("SEMANTIC", 10, "mock-model", "stop");
+        when(llmProvider.generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class)))
                 .thenAnswer(invocation -> CompletableFuture.completedFuture(mockResponse));
         
         java.util.Map<String, Object> context = new java.util.HashMap<>();
         MemoryType result = classifier.classifyMemory(content, context).get();
         
         assertEquals(MemoryType.SEMANTIC, result);
-        verify(llmProvider, times(1)).generate(anyString(), anyDouble(), anyInt());
+        verify(llmProvider, times(1)).generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class));
     }
     
     @Test
@@ -118,15 +121,15 @@ public class MemoryClassifierTest {
         String content = "In the meeting room, we always keep the temperature at 22°C";
         
         // Mock LLM response for contextual memory
-        LLMResponse mockResponse = new LLMResponse("CONTEXTUAL", "mock-model", 10, 100L, null);
-        when(llmProvider.generate(anyString(), anyDouble(), anyInt()))
+        LLMProvider.LLMResponse mockResponse = new LLMProvider.LLMResponse("CONTEXTUAL", 10, "mock-model", "stop");
+        when(llmProvider.generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class)))
                 .thenAnswer(invocation -> CompletableFuture.completedFuture(mockResponse));
         
         java.util.Map<String, Object> context = new java.util.HashMap<>();
         MemoryType result = classifier.classifyMemory(content, context).get();
         
         assertEquals(MemoryType.CONTEXTUAL, result);
-        verify(llmProvider, times(1)).generate(anyString(), anyDouble(), anyInt());
+        verify(llmProvider, times(1)).generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class));
     }
     
     @Test
@@ -134,15 +137,15 @@ public class MemoryClassifierTest {
         String content = "John is the manager of the development team";
         
         // Mock LLM response for relationship memory
-        LLMResponse mockResponse = new LLMResponse("RELATIONSHIP", "mock-model", 10, 100L, null);
-        when(llmProvider.generate(anyString(), anyDouble(), anyInt()))
+        LLMProvider.LLMResponse mockResponse = new LLMProvider.LLMResponse("RELATIONSHIP", 10, "mock-model", "stop");
+        when(llmProvider.generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class)))
                 .thenAnswer(invocation -> CompletableFuture.completedFuture(mockResponse));
         
         java.util.Map<String, Object> context = new java.util.HashMap<>();
         MemoryType result = classifier.classifyMemory(content, context).get();
         
         assertEquals(MemoryType.RELATIONSHIP, result);
-        verify(llmProvider, times(1)).generate(anyString(), anyDouble(), anyInt());
+        verify(llmProvider, times(1)).generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class));
     }
     
     @Test
@@ -150,15 +153,15 @@ public class MemoryClassifierTest {
         String content = "Every Monday at 9 AM, we have a team standup meeting";
         
         // Mock LLM response for temporal memory
-        LLMResponse mockResponse = new LLMResponse("TEMPORAL", "mock-model", 10, 100L, null);
-        when(llmProvider.generate(anyString(), anyDouble(), anyInt()))
+        LLMProvider.LLMResponse mockResponse = new LLMProvider.LLMResponse("TEMPORAL", 10, "mock-model", "stop");
+        when(llmProvider.generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class)))
                 .thenAnswer(invocation -> CompletableFuture.completedFuture(mockResponse));
         
         java.util.Map<String, Object> context = new java.util.HashMap<>();
         MemoryType result = classifier.classifyMemory(content, context).get();
         
         assertEquals(MemoryType.TEMPORAL, result);
-        verify(llmProvider, times(1)).generate(anyString(), anyDouble(), anyInt());
+        verify(llmProvider, times(1)).generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class));
     }
     
     @Test
@@ -166,8 +169,8 @@ public class MemoryClassifierTest {
         String content = "Some ambiguous content that doesn't fit clear categories";
         
         // Mock LLM response with unexpected format
-        LLMResponse mockResponse = new LLMResponse("UNKNOWN_TYPE", "mock-model", 10, 100L, null);
-        when(llmProvider.generate(anyString(), anyDouble(), anyInt()))
+        LLMProvider.LLMResponse mockResponse = new LLMProvider.LLMResponse("UNKNOWN_TYPE", 10, "mock-model", "stop");
+        when(llmProvider.generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class)))
                 .thenAnswer(invocation -> CompletableFuture.completedFuture(mockResponse));
         
         java.util.Map<String, Object> context = new java.util.HashMap<>();
@@ -175,7 +178,7 @@ public class MemoryClassifierTest {
         
         // Should fallback to SEMANTIC as default
         assertEquals(MemoryType.SEMANTIC, result);
-        verify(llmProvider, times(1)).generate(anyString(), anyDouble(), anyInt());
+        verify(llmProvider, times(1)).generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class));
     }
     
     @Test
@@ -183,7 +186,7 @@ public class MemoryClassifierTest {
         String content = "How to configure Spring Boot application.yml settings";
         
         // Mock LLM provider throwing exception
-        when(llmProvider.generate(anyString(), anyDouble(), anyInt()))
+        when(llmProvider.generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class)))
                 .thenReturn(createFailedFuture(new RuntimeException("LLM service unavailable")));
         
         java.util.Map<String, Object> context = new java.util.HashMap<>();
@@ -191,7 +194,7 @@ public class MemoryClassifierTest {
         
         // Should use rule-based fallback - "how to" indicates procedural
         assertEquals(MemoryType.PROCEDURAL, result);
-        verify(llmProvider, times(1)).generate(anyString(), anyDouble(), anyInt());
+        verify(llmProvider, times(1)).generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class));
     }
     
     @Test
@@ -199,7 +202,7 @@ public class MemoryClassifierTest {
         String content = "The Java programming language was created by Sun Microsystems";
         
         // Mock LLM provider throwing exception
-        when(llmProvider.generate(anyString(), anyDouble(), anyInt()))
+        when(llmProvider.generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class)))
                 .thenReturn(createFailedFuture(new RuntimeException("LLM service unavailable")));
         
         java.util.Map<String, Object> context = new java.util.HashMap<>();
@@ -207,7 +210,7 @@ public class MemoryClassifierTest {
         
         // Should use rule-based fallback - factual statement pattern
         assertEquals(MemoryType.FACTUAL, result);
-        verify(llmProvider, times(1)).generate(anyString(), anyDouble(), anyInt());
+        verify(llmProvider, times(1)).generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class));
     }
     
     @Test
@@ -215,7 +218,7 @@ public class MemoryClassifierTest {
         String content = "I like using IntelliJ IDEA more than Eclipse";
         
         // Mock LLM provider throwing exception
-        when(llmProvider.generate(anyString(), anyDouble(), anyInt()))
+        when(llmProvider.generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class)))
                 .thenReturn(createFailedFuture(new RuntimeException("LLM service unavailable")));
         
         java.util.Map<String, Object> context = new java.util.HashMap<>();
@@ -223,7 +226,7 @@ public class MemoryClassifierTest {
         
         // Should use rule-based fallback - preference indicators
         assertEquals(MemoryType.PREFERENCE, result);
-        verify(llmProvider, times(1)).generate(anyString(), anyDouble(), anyInt());
+        verify(llmProvider, times(1)).generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class));
     }
     
     @Test
@@ -231,7 +234,7 @@ public class MemoryClassifierTest {
         String content = "Last week I attended a conference about microservices";
         
         // Mock LLM provider throwing exception
-        when(llmProvider.generate(anyString(), anyDouble(), anyInt()))
+        when(llmProvider.generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class)))
                 .thenReturn(createFailedFuture(new RuntimeException("LLM service unavailable")));
         
         java.util.Map<String, Object> context = new java.util.HashMap<>();
@@ -239,7 +242,7 @@ public class MemoryClassifierTest {
         
         // Should use rule-based fallback - temporal indicators suggest episodic
         assertEquals(MemoryType.EPISODIC, result);
-        verify(llmProvider, times(1)).generate(anyString(), anyDouble(), anyInt());
+        verify(llmProvider, times(1)).generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class));
     }
     
     @Test
@@ -283,15 +286,15 @@ public class MemoryClassifierTest {
         String content = "User prefers dark mode interface";
         
         // Mock LLM response with lowercase
-        LLMResponse mockResponse = new LLMResponse("preference", "mock-model", 10, 100L, null);
-        when(llmProvider.generate(anyString(), anyDouble(), anyInt()))
+        LLMProvider.LLMResponse mockResponse = new LLMProvider.LLMResponse("preference", 10, "mock-model", "stop");
+        when(llmProvider.generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class)))
                 .thenAnswer(invocation -> CompletableFuture.completedFuture(mockResponse));
         
         java.util.Map<String, Object> context = new java.util.HashMap<>();
         MemoryType result = classifier.classifyMemory(content, context).get();
         
         assertEquals(MemoryType.PREFERENCE, result);
-        verify(llmProvider, times(1)).generate(anyString(), anyDouble(), anyInt());
+        verify(llmProvider, times(1)).generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class));
     }
     
     @Test
@@ -299,14 +302,14 @@ public class MemoryClassifierTest {
         String content = "The algorithm complexity is O(n log n)";
         
         // Mock LLM response with extra text
-        LLMResponse mockResponse = new LLMResponse("This is clearly FACTUAL information about algorithm complexity", "mock-model", 10, 100L, null);
-        when(llmProvider.generate(anyString(), anyDouble(), anyInt()))
+        LLMProvider.LLMResponse mockResponse = new LLMProvider.LLMResponse("This is clearly FACTUAL information about algorithm complexity", 10, "mock-model", "stop");
+        when(llmProvider.generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class)))
                 .thenAnswer(invocation -> CompletableFuture.completedFuture(mockResponse));
         
         java.util.Map<String, Object> context = new java.util.HashMap<>();
         MemoryType result = classifier.classifyMemory(content, context).get();
         
         assertEquals(MemoryType.FACTUAL, result);
-        verify(llmProvider, times(1)).generate(anyString(), anyDouble(), anyInt());
+        verify(llmProvider, times(1)).generateChatCompletion(anyList(), any(LLMProvider.LLMConfig.class));
     }
 }

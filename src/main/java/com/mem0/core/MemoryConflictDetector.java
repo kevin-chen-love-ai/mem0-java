@@ -210,6 +210,11 @@ public class MemoryConflictDetector {
     
     public CompletableFuture<List<MemoryConflict>> detectConflicts(EnhancedMemory newMemory, 
                                                                   List<EnhancedMemory> existingMemories) {
+        if (newMemory == null) {
+            logger.warn("Cannot detect conflicts for null memory");
+            return CompletableFuture.completedFuture(Collections.emptyList());
+        }
+        
         logger.debug("Detecting conflicts for new memory: {}", newMemory.getId());
         
         return findSimilarMemories(newMemory, existingMemories)
@@ -223,11 +228,15 @@ public class MemoryConflictDetector {
                     .collect(Collectors.toList());
                 
                 return CompletableFuture.allOf(conflictFutures.toArray(new CompletableFuture[0]))
-                    .thenApply(ignored -> conflictFutures.stream()
-                        .map(CompletableFuture::join)
-                        .filter(Objects::nonNull)
-                        .filter(conflict -> conflict.getConfidence() >= conflictConfidenceThreshold)
-                        .collect(Collectors.toList()));
+                    .thenApply(ignored -> {
+                        List<MemoryConflict> conflicts = conflictFutures.stream()
+                            .map(CompletableFuture::join)
+                            .filter(Objects::nonNull)
+                            .filter(conflict -> conflict.getConfidence() >= conflictConfidenceThreshold)
+                            .collect(Collectors.toList());
+                        logger.debug("Found {} conflicts after filtering by confidence threshold {}", conflicts.size(), conflictConfidenceThreshold);
+                        return conflicts;
+                    });
             });
     }
     
@@ -280,6 +289,11 @@ public class MemoryConflictDetector {
                             .sorted((a, b) -> Double.compare(b.getSimilarity(), a.getSimilarity()))
                             .collect(Collectors.toList());
                     });
+            })
+            .exceptionally(throwable -> {
+                logger.warn("Embedding provider failed, falling back to rule-based similarity: {}", throwable.getMessage());
+                // Fall back to rule-based similarity without embeddings
+                return Collections.emptyList();
             });
     }
     
@@ -344,16 +358,20 @@ public class MemoryConflictDetector {
         String content1 = memory1.getContent().toLowerCase();
         String content2 = memory2.getContent().toLowerCase();
         
+        // Preference conflicts (check first for preference memories)
+        if (memory1.getType() == MemoryType.PREFERENCE && memory2.getType() == MemoryType.PREFERENCE) {
+            logger.debug("Checking preference conflict between: '{}' and '{}'", content1, content2);
+            if (hasPreferenceConflict(content1, content2)) {
+                logger.debug("Preference conflict detected");
+                return ConflictType.PREFERENCE_CONFLICT;
+            } else {
+                logger.debug("No preference conflict detected");
+            }
+        }
+        
         // Direct contradiction detection
         if (hasDirectContradiction(content1, content2)) {
             return ConflictType.CONTRADICTION;
-        }
-        
-        // Preference conflicts
-        if (memory1.getType() == MemoryType.PREFERENCE && memory2.getType() == MemoryType.PREFERENCE) {
-            if (hasPreferenceConflict(content1, content2)) {
-                return ConflictType.PREFERENCE_CONFLICT;
-            }
         }
         
         // Factual conflicts
@@ -567,10 +585,34 @@ public class MemoryConflictDetector {
         Set<String> subjects1 = extractPreferenceSubjects(content1);
         Set<String> subjects2 = extractPreferenceSubjects(content2);
         
-        Set<String> commonSubjects = new HashSet<>(subjects1);
-        commonSubjects.retainAll(subjects2);
+        // Check if both contain preference-related words
+        boolean hasPreference1 = content1.matches(".*\\b(prefers?|likes?|enjoys?|loves?)\\b.*");
+        boolean hasPreference2 = content2.matches(".*\\b(prefers?|likes?|enjoys?|loves?)\\b.*");
         
-        return !commonSubjects.isEmpty() && hasOpposingPreferences(content1, content2);
+        logger.debug("hasPreference1: {}, hasPreference2: {}", hasPreference1, hasPreference2);
+        
+        if (!hasPreference1 || !hasPreference2) {
+            logger.debug("One or both contents don't contain preference words");
+            return false;
+        }
+        
+        // Check for opposing preferences (like vs dislike)
+        if (hasOpposingPreferences(content1, content2)) {
+            logger.debug("Opposing preferences detected");
+            return true;
+        }
+        
+        // Check for different preference objects (prefers coffee vs prefers tea)
+        Set<String> objects1 = extractPreferenceObjects(content1);
+        Set<String> objects2 = extractPreferenceObjects(content2);
+        
+        logger.debug("Preference objects 1: {}, objects 2: {}", objects1, objects2);
+        
+        // If both have preference objects and they're different, it's a conflict
+        boolean hasConflict = !objects1.isEmpty() && !objects2.isEmpty() && !objects1.equals(objects2);
+        logger.debug("Different preference objects conflict: {}", hasConflict);
+        
+        return hasConflict;
     }
     
     private boolean hasFactualConflict(String content1, String content2) {
@@ -601,6 +643,22 @@ public class MemoryConflictDetector {
         }
         
         return subjects;
+    }
+    
+    private Set<String> extractPreferenceObjects(String content) {
+        // Extract objects of preference (what is being preferred/liked)
+        Set<String> objects = new HashSet<>();
+        String[] words = content.split("\\s+");
+        
+        for (int i = 0; i < words.length - 1; i++) {
+            if (words[i].matches("(prefers?|likes?|enjoys?|loves?)")) {
+                if (i + 1 < words.length) {
+                    objects.add(words[i + 1].toLowerCase());
+                }
+            }
+        }
+        
+        return objects;
     }
     
     private boolean hasOpposingPreferences(String content1, String content2) {
@@ -684,13 +742,50 @@ public class MemoryConflictDetector {
     
     private MemoryConflict parseConflictAnalysisResponse(EnhancedMemory memory1, EnhancedMemory memory2, 
                                                         double semanticSimilarity, String response) {
+        logger.debug("Parsing LLM response: {}", response);
+        
         // Simplified JSON parsing - in production, use a proper JSON library
         boolean hasConflict = response.toLowerCase().contains("\"hasconflict\": true");
+        logger.debug("Has conflict: {}", hasConflict);
+        
         if (!hasConflict) return null;
         
         double confidence = 0.7; // Default confidence
         String reason = "LLM detected conflict";
         ConflictType type = ConflictType.CONTRADICTION;
+        
+        // Try to extract confidence from response
+        if (response.toLowerCase().contains("\"confidence\":")) {
+            try {
+                String confidenceStr = response.substring(response.toLowerCase().indexOf("\"confidence\":") + 13);
+                confidenceStr = confidenceStr.substring(0, confidenceStr.indexOf(","));
+                confidence = Double.parseDouble(confidenceStr.trim());
+            } catch (Exception e) {
+                logger.debug("Failed to parse confidence from response: {}", e.getMessage());
+            }
+        }
+        
+        // Try to extract reason from response
+        if (response.toLowerCase().contains("\"reason\":")) {
+            try {
+                String reasonStr = response.substring(response.toLowerCase().indexOf("\"reason\":") + 9);
+                reasonStr = reasonStr.substring(0, reasonStr.indexOf("\"", reasonStr.indexOf("\"") + 1) + 1);
+                reason = reasonStr.substring(reasonStr.indexOf("\"") + 1, reasonStr.lastIndexOf("\""));
+            } catch (Exception e) {
+                logger.debug("Failed to parse reason from response: {}", e.getMessage());
+            }
+        }
+        
+        // Try to extract conflict type from response
+        if (response.toLowerCase().contains("\"conflicttype\": \"preference_conflict\"")) {
+            type = ConflictType.PREFERENCE_CONFLICT;
+        } else if (response.toLowerCase().contains("\"conflicttype\": \"factual_conflict\"")) {
+            type = ConflictType.FACTUAL_CONFLICT;
+        } else if (response.toLowerCase().contains("\"conflicttype\": \"temporal_conflict\"")) {
+            type = ConflictType.TEMPORAL_CONFLICT;
+        }
+        
+        logger.debug("Parsed conflict type: {}", type);
         
         return new MemoryConflict(memory1, memory2, type, confidence, reason, semanticSimilarity);
     }
@@ -705,7 +800,30 @@ public class MemoryConflictDetector {
             strategy = ResolutionStrategy.KEEP_FIRST;
         } else if (response.toLowerCase().contains("merge")) {
             strategy = ResolutionStrategy.MERGE;
-            mergedContent = "Merged content"; // Simplified
+            
+            // Try to extract mergedContent from response
+            if (response.toLowerCase().contains("\"mergedcontent\":")) {
+                try {
+                    String mergedContentStr = response.substring(response.toLowerCase().indexOf("\"mergedcontent\":") + 16);
+                    mergedContentStr = mergedContentStr.substring(0, mergedContentStr.indexOf("\"", mergedContentStr.indexOf("\"") + 1) + 1);
+                    mergedContent = mergedContentStr.substring(mergedContentStr.indexOf("\"") + 1, mergedContentStr.lastIndexOf("\""));
+                } catch (Exception e) {
+                    mergedContent = "Merged content"; // Fallback
+                }
+            } else {
+                mergedContent = "Merged content"; // Fallback
+            }
+        }
+        
+        // Try to extract reason from response
+        if (response.toLowerCase().contains("\"reason\":")) {
+            try {
+                String reasonStr = response.substring(response.toLowerCase().indexOf("\"reason\":") + 9);
+                reasonStr = reasonStr.substring(0, reasonStr.indexOf("\"", reasonStr.indexOf("\"") + 1) + 1);
+                reason = reasonStr.substring(reasonStr.indexOf("\"") + 1, reasonStr.lastIndexOf("\""));
+            } catch (Exception e) {
+                // Keep default reason
+            }
         }
         
         return new ConflictResolution(strategy, mergedContent, reason);

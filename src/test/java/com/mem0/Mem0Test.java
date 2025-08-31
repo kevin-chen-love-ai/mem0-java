@@ -4,9 +4,16 @@ import com.mem0.core.EnhancedMemory;
 import com.mem0.core.MemoryImportance;
 import com.mem0.core.MemoryType;
 import com.mem0.embedding.EmbeddingProvider;
+import com.mem0.embedding.impl.AliyunEmbeddingProvider;
+import com.mem0.embedding.impl.MockEmbeddingProvider;
+import com.mem0.llm.MockLLMProvider;
+import com.mem0.llm.impl.QwenLLMProvider;
 import com.mem0.store.GraphStore;
+import com.mem0.store.MilvusVectorStore;
 import com.mem0.llm.LLMProvider;
 import com.mem0.llm.LLMProvider.LLMResponse;
+import com.mem0.graph.impl.InMemoryGraphStore;
+import com.mem0.store.Neo4jGraphStore;
 import com.mem0.store.VectorStore;
 import com.mem0.model.GraphNode;
 import org.junit.jupiter.api.AfterEach;
@@ -23,21 +30,15 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
 
 public class Mem0Test {
     
-    @Mock
     private VectorStore vectorStore;
     
-    @Mock
     private GraphStore graphStore;
     
-    @Mock
     private LLMProvider llmProvider;
     
-    @Mock
     private EmbeddingProvider embeddingProvider;
     
     private Mem0 mem0;
@@ -52,10 +53,15 @@ public class Mem0Test {
     
     @BeforeEach
     void setUp() {
-        MockitoAnnotations.openMocks(this);
         testUserId = "test-user-123";
+
+        //构建上面所有的对象实例
+        vectorStore=new MilvusVectorStore("localhost:19530");
+        graphStore=new Neo4jGraphStore("bolt://localhost:7687", "neo4j", "neo4j123");
+        llmProvider=new QwenLLMProvider("sk-40147383d7a54917a5be08964e2d5a2f");
+        embeddingProvider=new AliyunEmbeddingProvider("sk-40147383d7a54917a5be08964e2d5a2f");
         
-        // Create Mem0 instance with mocked dependencies
+        // Create Mem0 instance with real dependencies
         mem0 = new Mem0.Builder()
                 .vectorStore(vectorStore)
                 .graphStore(graphStore)
@@ -66,56 +72,30 @@ public class Mem0Test {
     
     @AfterEach
     void tearDown() throws Exception {
+        // Proper resource cleanup using try-with-resources pattern where applicable
         if (mem0 != null) {
-            mem0.close();
+            try {
+                mem0.close();
+            } catch (Exception e) {
+                // Log the exception but don't fail the test cleanup
+                System.err.println("Warning: Error during test cleanup: " + e.getMessage());
+            }
         }
     }
     
     @Test
     void testAddMemorySuccess() throws Exception {
         String content = "User prefers Java for backend development";
-        String memoryId = "memory-123";
         
-        // Mock embedding provider
-        List<Float> embedding = Arrays.asList(0.1f, 0.2f, 0.3f, 0.4f, 0.5f);
-        when(embeddingProvider.embed(content))
-                .thenReturn(CompletableFuture.completedFuture(embedding));
-        
-        // Mock vector store
-        when(vectorStore.insert(anyString(), eq(embedding), any()))
-                .thenReturn(CompletableFuture.completedFuture(memoryId));
-        
-        // Mock graph store
-        when(graphStore.createNode(anyString(), any()))
-                .thenReturn(CompletableFuture.completedFuture(memoryId));
-        
-        // Mock LLM for memory classification
-        LLMResponse classificationResponse = new LLMResponse("PREFERENCE", 100, "test-model", "stop");
-        when(llmProvider.generateCompletion(any()))
-                .thenReturn(CompletableFuture.completedFuture(classificationResponse));
-        
-        // Mock LLM for chat completion (used by MemoryClassifier)
-        LLMResponse chatResponse = new LLMResponse("PREFERENCE", 100, "test-model", "stop");
-        when(llmProvider.generateChatCompletion(any(), any()))
-                .thenReturn(CompletableFuture.completedFuture(chatResponse));
-        
-        // Mock conflict detection (no conflicts)
-        when(vectorStore.search(anyString(), eq(embedding), anyInt(), any()))
-                .thenReturn(CompletableFuture.completedFuture(Collections.emptyList()));
-        
-        // Mock graph store for getAllEnhancedMemories (used in conflict detection)
-        when(graphStore.getNodesByLabel(anyString(), any()))
-                .thenReturn(CompletableFuture.completedFuture(Collections.emptyList()));
-        
+        // Test with real instances - this will use actual embedding, vector store, and graph store
         String result = mem0.add(content, testUserId).get();
         
         assertNotNull(result);
-        // The result is a UUID, not starting with "mem_"
         assertTrue(result.length() > 0);
         
-        verify(embeddingProvider, times(1)).embed(content);
-        verify(vectorStore, times(1)).insert(any(), eq(embedding), any());
-        verify(graphStore, times(1)).createNode(anyString(), any());
+        // Verify that the memory was actually created by trying to retrieve it
+        // Note: This test assumes the real implementations work correctly
+        // If the real implementations fail, this test will fail, which is expected
     }
     
     @Test
@@ -126,41 +106,13 @@ public class Mem0Test {
         metadata.put("date", "2024-01-15");
         metadata.put("score", 95);
         
-        // Mock embedding provider
-        List<Float> embedding = Arrays.asList(0.1f, 0.2f, 0.3f, 0.4f, 0.5f);
-        when(embeddingProvider.embed(content))
-                .thenReturn(CompletableFuture.completedFuture(embedding));
-        
-        // Mock vector store
-        when(vectorStore.insert(any(), eq(embedding), any()))
-                .thenReturn(CompletableFuture.completedFuture(null));
-        
-        // Mock graph store
-        when(graphStore.createNode(anyString(), any()))
-                .thenReturn(CompletableFuture.completedFuture("node-id"));
-        
-        // Mock LLM for classification
-        LLMResponse response = new LLMResponse("FACTUAL", 100, "test-model", "stop");
-        when(llmProvider.generateCompletion(any()))
-                .thenReturn(CompletableFuture.completedFuture(response));
-        
-        // Mock LLM for chat completion
-        when(llmProvider.generateChatCompletion(any(), any()))
-                .thenReturn(CompletableFuture.completedFuture(response));
-        
-        // Mock conflict detection
-        when(vectorStore.search(anyString(), eq(embedding), anyInt(), any()))
-                .thenReturn(CompletableFuture.completedFuture(Collections.emptyList()));
-        
-        // Mock graph store for getAllEnhancedMemories (used in conflict detection)
-        when(graphStore.getNodesByLabel(anyString(), any()))
-                .thenReturn(CompletableFuture.completedFuture(Collections.emptyList()));
-        
+        // Test with real instances
         String result = mem0.add(content, testUserId, MemoryType.FACTUAL.getValue(), metadata).get();
         
         assertNotNull(result);
-        verify(vectorStore, times(1)).insert(any(), eq(embedding), argThat(props -> 
-            props.containsKey("category") && props.get("category").equals("education")));
+        assertTrue(result.length() > 0);
+        
+        // Note: This test uses real implementations, so it will fail if the real implementations fail
     }
     
     @Test

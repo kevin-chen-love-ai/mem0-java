@@ -166,9 +166,8 @@ public class Mem0AutoConfiguration {
     public VectorStore milvusVectorStore(Mem0Config config) {
         logger.info("Creating Milvus VectorStore");
         return new MilvusVectorStore(
-            config.getVectorStore().getHost(),
-            config.getVectorStore().getPort(),
-            config.getVectorStore().getToken()
+            config.getVectorStore().getHost()+":"+
+            config.getVectorStore().getPort()
         );
     }
     

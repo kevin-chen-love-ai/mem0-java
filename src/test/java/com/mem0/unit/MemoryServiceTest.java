@@ -14,6 +14,41 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * 内存服务单元测试 - Unit tests for MemoryService class
+ * 
+ * <p>此测试类验证MemoryService的核心功能，包括内存的CRUD操作、搜索功能、批量处理、
+ * 异步操作处理等。测试使用Mock提供者来避免对外部服务的依赖，确保测试的独立性和可靠性。</p>
+ * 
+ * <p>This test class verifies core functionalities of MemoryService, including memory CRUD operations,
+ * search capabilities, batch processing, asynchronous operation handling, etc. Tests use Mock providers
+ * to avoid external service dependencies, ensuring test independence and reliability.</p>
+ * 
+ * <h3>测试覆盖范围 / Test Coverage:</h3>
+ * <ul>
+ *   <li>内存服务初始化和配置 / Memory service initialization and configuration</li>
+ *   <li>内存添加、更新、删除操作 / Memory add, update, delete operations</li>
+ *   <li>内存搜索和检索功能 / Memory search and retrieval functionality</li>
+ *   <li>批量操作处理 / Batch operation processing</li>
+ *   <li>异步操作和超时处理 / Asynchronous operations and timeout handling</li>
+ *   <li>错误处理和异常情况 / Error handling and exception scenarios</li>
+ *   <li>资源清理和生命周期管理 / Resource cleanup and lifecycle management</li>
+ * </ul>
+ * 
+ * <h3>测试环境 / Test Environment:</h3>
+ * <ul>
+ *   <li>使用Mock提供者避免外部依赖 / Uses Mock providers to avoid external dependencies</li>
+ *   <li>每个测试独立的服务实例 / Independent service instance for each test</li>
+ *   <li>自动资源清理和超时保护 / Automatic resource cleanup and timeout protection</li>
+ *   <li>异常容错处理 / Exception-tolerant handling</li>
+ * </ul>
+ * 
+ * @author kevin.chen
+ * @version 1.0
+ * @since 1.0
+ * @see MemoryService
+ * @see Mem0Config
+ */
 public class MemoryServiceTest {
     
     private MemoryService memoryService;

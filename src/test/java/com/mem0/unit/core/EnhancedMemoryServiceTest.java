@@ -17,6 +17,54 @@ import org.junit.After;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+/**
+ * 增强内存服务单元测试 - Unit tests for EnhancedMemoryService class
+ * 
+ * <p>此测试类验证EnhancedMemoryService的高级功能，包括智能内存分类、冲突检测、
+ * 自动合并、重要性评分、遗忘管理等企业级特性。使用Mock对象模拟各种依赖服务，
+ * 确保测试的独立性和可控性。</p>
+ * 
+ * <p>This test class verifies advanced features of EnhancedMemoryService, including intelligent
+ * memory classification, conflict detection, automatic merging, importance scoring, forgetting
+ * management, and other enterprise-level features. Uses Mock objects to simulate various
+ * dependent services, ensuring test independence and controllability.</p>
+ * 
+ * <h3>测试覆盖的核心组件 / Core Components Under Test:</h3>
+ * <ul>
+ *   <li>MemoryClassifier - 智能内存分类器 / Intelligent memory classifier</li>
+ *   <li>MemoryConflictDetector - 内存冲突检测器 / Memory conflict detector</li>
+ *   <li>MemoryMergeStrategy - 内存合并策略 / Memory merge strategy</li>
+ *   <li>MemoryImportanceScorer - 内存重要性评分器 / Memory importance scorer</li>
+ *   <li>MemoryForgettingManager - 内存遗忘管理器 / Memory forgetting manager</li>
+ * </ul>
+ * 
+ * <h3>Mock依赖服务 / Mock Dependencies:</h3>
+ * <ul>
+ *   <li>EmbeddingProvider - 嵌入向量生成服务 / Embedding vector generation service</li>
+ *   <li>LLMProvider - 大语言模型服务 / Large language model service</li>
+ *   <li>VectorStore - 向量存储服务 / Vector storage service</li>
+ *   <li>GraphStore - 图存储服务 / Graph storage service</li>
+ * </ul>
+ * 
+ * <h3>测试场景 / Test Scenarios:</h3>
+ * <ul>
+ *   <li>内存添加的智能增强处理 / Intelligent enhancement processing for memory addition</li>
+ *   <li>重复内存的自动检测和合并 / Automatic detection and merging of duplicate memories</li>
+ *   <li>内存冲突的识别和解决 / Identification and resolution of memory conflicts</li>
+ *   <li>动态重要性评分和调整 / Dynamic importance scoring and adjustment</li>
+ *   <li>基于策略的内存遗忘处理 / Strategy-based memory forgetting processing</li>
+ *   <li>异步处理和并发操作 / Asynchronous processing and concurrent operations</li>
+ * </ul>
+ * 
+ * @author kevin.chen
+ * @version 1.0
+ * @since 1.0
+ * @see EnhancedMemoryService
+ * @see EnhancedMemory
+ * @see MemoryClassifier
+ * @see MemoryConflictDetector
+ */
+
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;

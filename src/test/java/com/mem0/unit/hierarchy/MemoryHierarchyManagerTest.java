@@ -28,12 +28,61 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
- * 内存层级管理器单元测试
- * Memory Hierarchy Manager Unit Tests
+ * 内存层级管理器单元测试类 - Memory hierarchy manager unit test class
+ * 
+ * <p>本测试类全面验证MemoryHierarchyManager的所有核心功能，确保分层内存管理系统
+ * 在多用户、多会话、多代理环境下的正确性和可靠性。测试覆盖用户级、会话级和代理级
+ * 的内存操作，包括创建、检索、更新、删除以及跨层级搜索等关键功能。</p>
+ * 
+ * <p>This test class comprehensively validates all core functionalities of MemoryHierarchyManager,
+ * ensuring correctness and reliability of the hierarchical memory management system in multi-user,
+ * multi-session, and multi-agent environments. Test coverage includes user-level, session-level,
+ * and agent-level memory operations, including creation, retrieval, updating, deletion, and
+ * cross-hierarchy search functionalities.</p>
+ * 
+ * <h3>测试覆盖范围 / Test Coverage Areas:</h3>
+ * <ul>
+ *   <li><strong>初始化测试</strong> - 管理器初始化和配置验证 / Initialization tests - manager initialization and configuration validation</li>
+ *   <li><strong>用户内存管理</strong> - 用户级内存的创建、获取和管理 / User memory management - user-level memory creation, retrieval and management</li>
+ *   <li><strong>会话内存管理</strong> - 会话级内存的生命周期管理 / Session memory management - session-level memory lifecycle management</li>
+ *   <li><strong>代理内存管理</strong> - 代理级内存的隔离和管理 / Agent memory management - agent-level memory isolation and management</li>
+ *   <li><strong>内存路由测试</strong> - 智能内存路由和分发机制 / Memory routing tests - intelligent memory routing and distribution mechanism</li>
+ *   <li><strong>跨层级搜索</strong> - 多层级内存搜索和结果聚合 / Cross-hierarchy search - multi-level memory search and result aggregation</li>
+ *   <li><strong>统计信息管理</strong> - 各层级的统计数据收集和报告 / Statistics management - statistics collection and reporting at all levels</li>
+ *   <li><strong>清理机制测试</strong> - 过期内存和资源的自动清理 / Cleanup mechanism tests - automatic cleanup of expired memories and resources</li>
+ *   <li><strong>并发安全测试</strong> - 多线程环境下的数据一致性 / Concurrent safety tests - data consistency in multithreaded environments</li>
+ * </ul>
+ * 
+ * <h3>内存层级结构 / Memory Hierarchy Structure:</h3>
+ * <ul>
+ *   <li><strong>用户级 (User Level)</strong> - 用户的长期记忆和偏好设置</li>
+ *   <li><strong>会话级 (Session Level)</strong> - 会话范围内的上下文记忆</li>
+ *   <li><strong>代理级 (Agent Level)</strong> - 特定代理的临时工作记忆</li>
+ * </ul>
+ * 
+ * <h3>测试方法论 / Testing Methodology:</h3>
+ * <ul>
+ *   <li><strong>分组测试</strong> - 使用@Nested注解组织相关测试用例</li>
+ *   <li><strong>边界测试</strong> - 验证null值、空字符串等边界条件</li>
+ *   <li><strong>异步测试</strong> - 验证CompletableFuture异步操作的正确性</li>
+ *   <li><strong>并发测试</strong> - 多线程环境下的线程安全验证</li>
+ *   <li><strong>集成测试</strong> - 验证各层级之间的协作和数据流</li>
+ * </ul>
+ * 
+ * <p>测试使用JUnit 5框架和Mockito进行模拟，确保测试的独立性和可重复性。
+ * 每个测试都包含详细的断言验证，确保功能行为符合预期规范。</p>
+ * 
+ * <p>Tests use JUnit 5 framework and Mockito for mocking, ensuring test independence
+ * and repeatability. Each test includes detailed assertion validation to ensure
+ * functional behavior meets expected specifications.</p>
  * 
  * @author kevin.chen
  * @version 1.0
  * @since 1.0
+ * @see MemoryHierarchyManager
+ * @see UserMemory
+ * @see SessionMemory
+ * @see AgentMemory
  */
 @DisplayName("Memory Hierarchy Manager Tests")
 class MemoryHierarchyManagerTest {
@@ -328,23 +377,17 @@ class MemoryHierarchyManagerTest {
         @Test
         @DisplayName("Should handle empty query gracefully")
         void shouldHandleEmptyQueryGracefully() {
-            CompletableFuture<HierarchicalSearchResult> result = hierarchyManager.searchAcrossHierarchy(
-                TEST_USER_ID, null, null, "", 10
-            );
-            
-            assertNotNull(result);
-            assertDoesNotThrow(() -> result.get());
+            assertThrows(IllegalArgumentException.class, () -> {
+                hierarchyManager.searchAcrossHierarchy(TEST_USER_ID, null, null, "", 10);
+            });
         }
         
         @Test
         @DisplayName("Should handle negative limit gracefully")
         void shouldHandleNegativeLimitGracefully() {
-            CompletableFuture<HierarchicalSearchResult> result = hierarchyManager.searchAcrossHierarchy(
-                TEST_USER_ID, null, null, "test query", -1
-            );
-            
-            assertNotNull(result);
-            assertDoesNotThrow(() -> result.get());
+            assertThrows(IllegalArgumentException.class, () -> {
+                hierarchyManager.searchAcrossHierarchy(TEST_USER_ID, null, null, "test query", -1);
+            });
         }
     }
     

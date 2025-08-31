@@ -74,7 +74,15 @@ public class GraphRelationship {
         this.sourceNodeId = sourceNodeId;
         this.targetNodeId = targetNodeId;
         this.type = type;
-        this.properties = new ConcurrentHashMap<>(properties != null ? properties : new ConcurrentHashMap<>());
+        this.properties = new ConcurrentHashMap<>();
+        if (properties != null) {
+            // Filter out null values since ConcurrentHashMap doesn't allow them
+            properties.forEach((key, value) -> {
+                if (value != null) {
+                    this.properties.put(key, value);
+                }
+            });
+        }
         this.createdTime = System.currentTimeMillis();
     }
 

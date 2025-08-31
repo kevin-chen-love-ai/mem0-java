@@ -64,7 +64,8 @@ public class VectorEntry {
 
     public VectorEntry(String id, float[] embedding, String userId, Map<String, Object> properties) {
         this.id = id;
-        this.embedding = embedding;
+        // 复制嵌入向量数组以确保不可变性
+        this.embedding = embedding != null ? embedding.clone() : null;
         this.userId = userId;
         this.properties = properties;
         this.lastAccessTime = System.currentTimeMillis();
@@ -79,7 +80,8 @@ public class VectorEntry {
     }
 
     public float[] getEmbedding() {
-        return embedding;
+        // 返回数组的副本以确保不可变性
+        return embedding != null ? embedding.clone() : null;
     }
 
     public String getUserId() {

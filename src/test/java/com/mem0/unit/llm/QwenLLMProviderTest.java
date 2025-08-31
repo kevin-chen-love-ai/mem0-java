@@ -20,8 +20,50 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- * QwenLLMProvider 单元测试
- * 覆盖所有API调用和错误处理场景
+ * 通义千问LLM提供者单元测试 - Unit tests for QwenLLMProvider class
+ * 
+ * <p>此测试类全面验证QwenLLMProvider与阿里云通义千问大语言模型的集成功能，
+ * 包括API调用、响应处理、错误处理、超时处理等各种场景。使用Mock技术模拟
+ * HTTP客户端，确保测试的可靠性和独立性。</p>
+ * 
+ * <p>This test class comprehensively verifies the integration functionality of QwenLLMProvider
+ * with Alibaba Cloud Tongyi Qianwen large language model, including API calls, response handling,
+ * error handling, timeout processing, and various scenarios. Uses Mock technology to simulate
+ * HTTP client to ensure test reliability and independence.</p>
+ * 
+ * <h3>测试覆盖范围 / Test Coverage:</h3>
+ * <ul>
+ *   <li>通义千问API集成测试 / Tongyi Qianwen API integration testing</li>
+ *   <li>聊天完成请求和响应处理 / Chat completion requests and response handling</li>
+ *   <li>HTTP客户端交互模拟 / HTTP client interaction simulation</li>
+ *   <li>API错误响应处理 / API error response handling</li>
+ *   <li>网络超时和异常处理 / Network timeout and exception handling</li>
+ *   <li>JSON序列化和反序列化 / JSON serialization and deserialization</li>
+ *   <li>异步操作和CompletableFuture处理 / Asynchronous operations and CompletableFuture handling</li>
+ * </ul>
+ * 
+ * <h3>Mock对象 / Mock Objects:</h3>
+ * <ul>
+ *   <li>OkHttpClient - HTTP客户端模拟 / HTTP client simulation</li>
+ *   <li>Call和Response - HTTP调用和响应模拟 / HTTP call and response simulation</li>
+ *   <li>ResponseBody - 响应体内容模拟 / Response body content simulation</li>
+ * </ul>
+ * 
+ * <h3>测试场景 / Test Scenarios:</h3>
+ * <ul>
+ *   <li>成功的API调用和正常响应 / Successful API calls and normal responses</li>
+ *   <li>API密钥验证和权限检查 / API key validation and permission checking</li>
+ *   <li>请求参数格式验证 / Request parameter format validation</li>
+ *   <li>HTTP状态码错误处理 / HTTP status code error handling</li>
+ *   <li>网络连接异常处理 / Network connection exception handling</li>
+ *   <li>JSON格式错误处理 / JSON format error handling</li>
+ * </ul>
+ * 
+ * @author kevin.chen
+ * @version 1.0
+ * @since 1.0
+ * @see QwenLLMProvider
+ * @see LLMProvider
  */
 public class QwenLLMProviderTest {
 
