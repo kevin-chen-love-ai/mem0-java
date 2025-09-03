@@ -243,7 +243,7 @@ class Neo4jGraphStore implements GraphStore {
                 
                 query.append(") RETURN n");
                 
-                Result result = session.run(query.toString(), properties != null ? properties : Map.of());
+                Result result = session.run(query.toString(), properties != null ? properties : new HashMap<>());
                 List<GraphNode> nodes = new ArrayList<>();
                 
                 while (result.hasNext()) {
@@ -285,7 +285,7 @@ class Neo4jGraphStore implements GraphStore {
     public CompletableFuture<List<Map<String, Object>>> executeQuery(String query, Map<String, Object> parameters) {
         return CompletableFuture.supplyAsync(() -> {
             try (Session session = driver.session()) {
-                Result result = session.run(query, parameters != null ? parameters : Map.of());
+                Result result = session.run(query, parameters != null ? parameters : new HashMap<>());
                 List<Map<String, Object>> results = new ArrayList<>();
                 
                 while (result.hasNext()) {

@@ -63,11 +63,10 @@ public class RedisIntegrationExample {
         System.out.println("   ✓ Get cache value: " + value.orElse("null"));
         
         // 测试对象缓存
-        Map<String, Object> data = Map.of(
-            "name", "John Doe",
-            "age", 30,
-            "skills", List.of("Java", "Python", "Redis")
-        );
+        Map<String, Object> data = new HashMap<>();
+        data.put("name", "John Doe");
+        data.put("age", 30);
+        data.put("skills", Arrays.asList("Java", "Python", "Redis"));
         
         cache.setObject("user:1", data, 300);
         System.out.println("   ✓ Set object cache");
@@ -526,12 +525,11 @@ class RedisCacheProvider {
     public CompletableFuture<Void> cacheMemory(String key, com.mem0.core.Memory memory, int ttlSeconds) {
         return CompletableFuture.runAsync(() -> {
             try {
-                Map<String, Object> memoryData = Map.of(
-                    "id", memory.getId(),
-                    "content", memory.getContent(),
-                    "userId", memory.getUserId(),
-                    "timestamp", memory.getCreatedAt()
-                );
+                Map<String, Object> memoryData = new HashMap<>();
+                memoryData.put("id", memory.getId());
+                memoryData.put("content", memory.getContent());
+                memoryData.put("userId", memory.getUserId());
+                memoryData.put("timestamp", memory.getCreatedAt());
                 
                 cache.setObject("mem0:memory:" + key, memoryData, ttlSeconds);
                 logger.debug("Cached memory: {}", key);

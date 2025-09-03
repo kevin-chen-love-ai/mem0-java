@@ -8,6 +8,7 @@ import com.mem0.embedding.impl.MockEmbeddingProvider;
 import com.mem0.llm.LLMProvider;
 import com.mem0.llm.MockLLMProvider;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
@@ -91,7 +92,7 @@ public class BasicUsageExample {
         System.out.println("3. Running batch operations...");
         
         // 批量添加记忆
-        List<String> batchTexts = List.of(
+        List<String> batchTexts = Arrays.asList(
             "I enjoy reading technical books",
             "My office is located in downtown",
             "I have 5 years of experience in backend development",

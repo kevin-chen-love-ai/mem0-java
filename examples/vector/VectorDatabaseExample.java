@@ -13,11 +13,10 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+// Note: This example requires HTTP client library for Java 8 compatibility
+// You can use OkHttp or Apache HttpClient instead of java.net.http
+// import okhttp3.*;
 import java.net.URI;
-import java.time.Duration;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
@@ -25,6 +24,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * 
  * 展示如何集成不同的向量数据库：Pinecone、Weaviate、Qdrant等
  * Demonstrates integration with various vector databases: Pinecone, Weaviate, Qdrant, etc.
+ * 
+ * NOTE: This example is for demonstration purposes only. For Java 8 compatibility,
+ * replace java.net.http with OkHttp or Apache HttpClient:
+ * 
+ * <dependency>
+ *     <groupId>com.squareup.okhttp3</groupId>
+ *     <artifactId>okhttp</artifactId>
+ *     <version>4.10.0</version>
+ * </dependency>
  */
 public class VectorDatabaseExample {
     
@@ -123,16 +131,17 @@ class PineconeVectorStore implements VectorStore {
     private final String apiKey;
     private final String environment;
     private final String indexName;
-    private final HttpClient httpClient;
+    // Note: For Java 8 compatibility, use OkHttp or Apache HttpClient
+    // private final OkHttpClient httpClient;
     private final ObjectMapper objectMapper;
     
     public PineconeVectorStore(String apiKey, String environment, String indexName) {
         this.apiKey = apiKey;
         this.environment = environment;
         this.indexName = indexName;
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(30))
-                .build();
+        // this.httpClient = new OkHttpClient.Builder()
+        //         .connectTimeout(30, TimeUnit.SECONDS)
+        //         .build();
         this.objectMapper = new ObjectMapper();
     }
     
@@ -141,17 +150,20 @@ class PineconeVectorStore implements VectorStore {
                                                  Map<String, Object> metadata, String userId) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                Map<String, Object> vector = Map.of(
-                    "id", id,
-                    "values", embedding,
-                    "metadata", Map.of(
-                        "userId", userId,
-                        "content", metadata.getOrDefault("content", ""),
-                        "timestamp", System.currentTimeMillis()
-                    )
-                );
+                // Create metadata map for Java 8 compatibility
+                Map<String, Object> metadataMap = new HashMap<>();
+                metadataMap.put("userId", userId);
+                metadataMap.put("content", metadata.getOrDefault("content", ""));
+                metadataMap.put("timestamp", System.currentTimeMillis());
                 
-                Map<String, Object> requestBody = Map.of("vectors", List.of(vector));
+                // Create vector map for Java 8 compatibility
+                Map<String, Object> vector = new HashMap<>();
+                vector.put("id", id);
+                vector.put("values", embedding);
+                vector.put("metadata", metadataMap);
+                
+                Map<String, Object> requestBody = new HashMap<>();
+                requestBody.put("vectors", Arrays.asList(vector));
                 
                 String url = String.format("https://%s-%s.svc.%s.pinecone.io/vectors/upsert", 
                                           indexName, environment, environment);
@@ -184,12 +196,16 @@ class PineconeVectorStore implements VectorStore {
                                                               String userId, int limit) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                Map<String, Object> requestBody = Map.of(
-                    "vector", queryEmbedding,
-                    "topK", limit,
-                    "includeMetadata", true,
-                    "filter", Map.of("userId", userId)
-                );
+                // Create filter map for Java 8 compatibility
+                Map<String, Object> filter = new HashMap<>();
+                filter.put("userId", userId);
+                
+                // Create request body for Java 8 compatibility
+                Map<String, Object> requestBody = new HashMap<>();
+                requestBody.put("vector", queryEmbedding);
+                requestBody.put("topK", limit);
+                requestBody.put("includeMetadata", true);
+                requestBody.put("filter", filter);
                 
                 String url = String.format("https://%s-%s.svc.%s.pinecone.io/query", 
                                           indexName, environment, environment);
@@ -231,7 +247,8 @@ class PineconeVectorStore implements VectorStore {
     public CompletableFuture<Void> deleteVector(String id, String userId) {
         return CompletableFuture.runAsync(() -> {
             try {
-                Map<String, Object> requestBody = Map.of("ids", List.of(id));
+                Map<String, Object> requestBody = new HashMap<>();
+                requestBody.put("ids", Arrays.asList(id));
                 
                 String url = String.format("https://%s-%s.svc.%s.pinecone.io/vectors/delete", 
                                           indexName, environment, environment);
@@ -293,16 +310,17 @@ class WeaviateVectorStore implements VectorStore {
     
     private final String endpoint;
     private final String apiKey;
-    private final HttpClient httpClient;
+    // Note: For Java 8 compatibility, use OkHttp or Apache HttpClient
+    // private final OkHttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final String className = "MemoryVector";
     
     public WeaviateVectorStore(String endpoint, String apiKey) {
         this.endpoint = endpoint.endsWith("/") ? endpoint : endpoint + "/";
         this.apiKey = apiKey;
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(30))
-                .build();
+        // this.httpClient = new OkHttpClient.Builder()
+        //         .connectTimeout(30, TimeUnit.SECONDS)
+        //         .build();
         this.objectMapper = new ObjectMapper();
     }
     
@@ -315,12 +333,12 @@ class WeaviateVectorStore implements VectorStore {
                 properties.put("userId", userId);
                 properties.put("vectorId", id);
                 
-                Map<String, Object> object = Map.of(
-                    "class", className,
-                    "id", id,
-                    "properties", properties,
-                    "vector", embedding
-                );
+                // Create object map for Java 8 compatibility
+                Map<String, Object> object = new HashMap<>();
+                object.put("class", className);
+                object.put("id", id);
+                object.put("properties", properties);
+                object.put("vector", embedding);
                 
                 HttpRequest request = HttpRequest.newBuilder()
                         .uri(URI.create(endpoint + "v1/objects"))
@@ -373,9 +391,10 @@ class WeaviateVectorStore implements VectorStore {
                         }
                       }
                     }
-                    """, className, embedding ArrayToString(queryEmbedding), userId, limit);
+                    """, className, embeddingArrayToString(queryEmbedding), userId, limit);
                 
-                Map<String, Object> requestBody = Map.of("query", graphql);
+                Map<String, Object> requestBody = new HashMap<>();
+                requestBody.put("query", graphql);
                 
                 HttpRequest request = HttpRequest.newBuilder()
                         .uri(URI.create(endpoint + "v1/graphql"))
@@ -482,16 +501,17 @@ class QdrantVectorStore implements VectorStore {
     
     private final String endpoint;
     private final String apiKey;
-    private final HttpClient httpClient;
+    // Note: For Java 8 compatibility, use OkHttp or Apache HttpClient
+    // private final OkHttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final String collectionName = "mem0_vectors";
     
     public QdrantVectorStore(String endpoint, String apiKey) {
         this.endpoint = endpoint.endsWith("/") ? endpoint : endpoint + "/";
         this.apiKey = apiKey;
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(30))
-                .build();
+        // this.httpClient = new OkHttpClient.Builder()
+        //         .connectTimeout(30, TimeUnit.SECONDS)
+        //         .build();
         this.objectMapper = new ObjectMapper();
     }
     
@@ -503,13 +523,14 @@ class QdrantVectorStore implements VectorStore {
                 Map<String, Object> payload = new HashMap<>(metadata);
                 payload.put("userId", userId);
                 
-                Map<String, Object> point = Map.of(
-                    "id", id,
-                    "vector", embedding,
-                    "payload", payload
-                );
+                // Create point map for Java 8 compatibility
+                Map<String, Object> point = new HashMap<>();
+                point.put("id", id);
+                point.put("vector", embedding);
+                point.put("payload", payload);
                 
-                Map<String, Object> requestBody = Map.of("points", List.of(point));
+                Map<String, Object> requestBody = new HashMap<>();
+                requestBody.put("points", Arrays.asList(point));
                 
                 HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                         .uri(URI.create(endpoint + "collections/" + collectionName + "/points"))
@@ -542,17 +563,22 @@ class QdrantVectorStore implements VectorStore {
                                                               String userId, int limit) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                Map<String, Object> requestBody = Map.of(
-                    "vector", queryEmbedding,
-                    "limit", limit,
-                    "with_payload", true,
-                    "filter", Map.of(
-                        "must", List.of(Map.of(
-                            "key", "userId",
-                            "match", Map.of("value", userId)
-                        ))
-                    )
-                );
+                // Create filter structure for Java 8 compatibility
+                Map<String, Object> matchValue = new HashMap<>();
+                matchValue.put("value", userId);
+                
+                Map<String, Object> mustCondition = new HashMap<>();
+                mustCondition.put("key", "userId");
+                mustCondition.put("match", matchValue);
+                
+                Map<String, Object> filter = new HashMap<>();
+                filter.put("must", Arrays.asList(mustCondition));
+                
+                Map<String, Object> requestBody = new HashMap<>();
+                requestBody.put("vector", queryEmbedding);
+                requestBody.put("limit", limit);
+                requestBody.put("with_payload", true);
+                requestBody.put("filter", filter);
                 
                 HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                         .uri(URI.create(endpoint + "collections/" + collectionName + "/points/search"))
@@ -594,7 +620,8 @@ class QdrantVectorStore implements VectorStore {
     public CompletableFuture<Void> deleteVector(String id, String userId) {
         return CompletableFuture.runAsync(() -> {
             try {
-                Map<String, Object> requestBody = Map.of("points", List.of(id));
+                Map<String, Object> requestBody = new HashMap<>();
+                requestBody.put("points", Arrays.asList(id));
                 
                 HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                         .uri(URI.create(endpoint + "collections/" + collectionName + "/points/delete"))

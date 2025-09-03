@@ -96,7 +96,11 @@
       "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_361.jdk/Contents/Home mvn test -Dtest=\"com.mem0.unit.store.vector.InMemoryVectorStoreTest\" -q)",
       "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_361.jdk/Contents/Home mvn test -Dtest=\"com.mem0.unit.vector.InMemoryVectorStoreTest\" -q)",
       "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_361.jdk/Contents/Home mvn test -Dtest=\"*InMemoryVectorStoreTest*\")",
-      "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_361.jdk/Contents/Home mvn test -Dtest=\"*Fast*,*Simple*,*Quality*\" -q)"
+      "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_361.jdk/Contents/Home mvn test -Dtest=\"*Fast*,*Simple*,*Quality*\" -q)",
+      "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_361.jdk/Contents/Home mvn test -Dtest=\"!*Performance*,!*Benchmark*,!*Load*\" -DfailIfNoTests=false)",
+      "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_361.jdk/Contents/Home mvn test -Dtest=\"*InMemoryVectorStoreTest,*FastMemoryTest,*Mem0Test,*CoreTest\" -q)",
+      "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_361.jdk/Contents/Home mvn test -Dtest=\"*InMemoryVectorStoreTest\")",
+      "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_361.jdk/Contents/Home mvn test -Dtest=\"*FastMemoryTest\")"
     ],
     "deny": [],
     "ask": [],

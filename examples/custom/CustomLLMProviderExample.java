@@ -9,22 +9,30 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+// Note: For Java 8 compatibility, replace java.net.http with OkHttp or Apache HttpClient
+// import okhttp3.*;
 import java.net.URI;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
+// Java 11+ imports - replace with OkHttp for Java 8 compatibility
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+
 /**
  * 自定义LLM提供者示例 - Custom LLM Provider Example
  * 
  * 展示如何实现自定义的LLM提供者，支持多种LLM服务
  * Demonstrates how to implement custom LLM providers for various LLM services
+ * 
+ * NOTE: This example is for demonstration purposes only. For Java 8 compatibility,
+ * replace java.net.http with OkHttp or Apache HttpClient.
  */
 public class CustomLLMProviderExample {
     
@@ -112,12 +120,11 @@ class ClaudeLLMProvider implements LLMProvider {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 // 构建Claude API请求
-                Map<String, Object> requestBody = Map.of(
-                    "model", config.getModel() != null ? config.getModel() : "claude-3-sonnet-20240229",
-                    "max_tokens", config.getMaxTokens() != null ? config.getMaxTokens() : 1000,
-                    "temperature", config.getTemperature() != null ? config.getTemperature() : 0.7,
-                    "messages", convertMessages(messages)
-                );
+                Map<String, Object> requestBody = new HashMap<>();
+                requestBody.put("model", config.getModel() != null ? config.getModel() : "claude-3-sonnet-20240229");
+                requestBody.put("max_tokens", config.getMaxTokens() != null ? config.getMaxTokens() : 1000);
+                requestBody.put("temperature", config.getTemperature() != null ? config.getTemperature() : 0.7);
+                requestBody.put("messages", convertMessages(messages));
                 
                 HttpRequest request = HttpRequest.newBuilder()
                         .uri(URI.create("https://api.anthropic.com/v1/messages"))
@@ -152,10 +159,12 @@ class ClaudeLLMProvider implements LLMProvider {
     
     private List<Map<String, String>> convertMessages(List<ChatMessage> messages) {
         return messages.stream()
-                .map(msg -> Map.of(
-                    "role", msg.getRole(),
-                    "content", msg.getContent()
-                ))
+                .map(msg -> {
+                    Map<String, String> msgMap = new HashMap<>();
+                    msgMap.put("role", msg.getRole());
+                    msgMap.put("content", msg.getContent());
+                    return msgMap;
+                })
                 .collect(java.util.stream.Collectors.toList());
     }
 }
@@ -187,13 +196,13 @@ class GeminiLLMProvider implements LLMProvider {
                 String model = config.getModel() != null ? config.getModel() : "gemini-pro";
                 
                 // 构建Gemini API请求
-                Map<String, Object> requestBody = Map.of(
-                    "contents", convertMessagesToGeminiFormat(messages),
-                    "generationConfig", Map.of(
-                        "temperature", config.getTemperature() != null ? config.getTemperature() : 0.7,
-                        "maxOutputTokens", config.getMaxTokens() != null ? config.getMaxTokens() : 1000
-                    )
-                );
+                Map<String, Object> generationConfig = new HashMap<>();
+                generationConfig.put("temperature", config.getTemperature() != null ? config.getTemperature() : 0.7);
+                generationConfig.put("maxOutputTokens", config.getMaxTokens() != null ? config.getMaxTokens() : 1000);
+                
+                Map<String, Object> requestBody = new HashMap<>();
+                requestBody.put("contents", convertMessagesToGeminiFormat(messages));
+                requestBody.put("generationConfig", generationConfig);
                 
                 String url = String.format("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", 
                                          model, apiKey);
@@ -228,10 +237,15 @@ class GeminiLLMProvider implements LLMProvider {
     
     private List<Map<String, Object>> convertMessagesToGeminiFormat(List<ChatMessage> messages) {
         return messages.stream()
-                .map(msg -> Map.of(
-                    "role", convertRoleToGemini(msg.getRole()),
-                    "parts", List.of(Map.of("text", msg.getContent()))
-                ))
+                .map(msg -> {
+                    Map<String, String> textPart = new HashMap<>();
+                    textPart.put("text", msg.getContent());
+                    
+                    Map<String, Object> msgMap = new HashMap<>();
+                    msgMap.put("role", convertRoleToGemini(msg.getRole()));
+                    msgMap.put("parts", java.util.Arrays.asList(textPart));
+                    return msgMap;
+                })
                 .collect(java.util.stream.Collectors.toList());
     }
     
@@ -275,15 +289,15 @@ class LocalLLMProvider implements LLMProvider {
                 String model = config.getModel() != null ? config.getModel() : "llama2";
                 
                 // 构建Ollama API请求
-                Map<String, Object> requestBody = Map.of(
-                    "model", model,
-                    "messages", convertMessages(messages),
-                    "stream", false,
-                    "options", Map.of(
-                        "temperature", config.getTemperature() != null ? config.getTemperature() : 0.7,
-                        "num_predict", config.getMaxTokens() != null ? config.getMaxTokens() : 1000
-                    )
-                );
+                Map<String, Object> options = new HashMap<>();
+                options.put("temperature", config.getTemperature() != null ? config.getTemperature() : 0.7);
+                options.put("num_predict", config.getMaxTokens() != null ? config.getMaxTokens() : 1000);
+                
+                Map<String, Object> requestBody = new HashMap<>();
+                requestBody.put("model", model);
+                requestBody.put("messages", convertMessages(messages));
+                requestBody.put("stream", false);
+                requestBody.put("options", options);
                 
                 HttpRequest request = HttpRequest.newBuilder()
                         .uri(URI.create(baseUrl + "api/chat"))
@@ -314,10 +328,12 @@ class LocalLLMProvider implements LLMProvider {
     
     private List<Map<String, String>> convertMessages(List<ChatMessage> messages) {
         return messages.stream()
-                .map(msg -> Map.of(
-                    "role", msg.getRole(),
-                    "content", msg.getContent()
-                ))
+                .map(msg -> {
+                    Map<String, String> msgMap = new HashMap<>();
+                    msgMap.put("role", msg.getRole());
+                    msgMap.put("content", msg.getContent());
+                    return msgMap;
+                })
                 .collect(java.util.stream.Collectors.toList());
     }
 }

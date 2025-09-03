@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -73,16 +74,16 @@ class MemoryController {
     public Map<String, Object> addMemory(@RequestBody AddMemoryRequest request) {
         try {
             String memoryId = mem0Client.add(request.getText(), request.getUserId());
-            return Map.of(
-                "success", true,
-                "memoryId", memoryId,
-                "message", "Memory added successfully"
-            );
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("memoryId", memoryId);
+            response.put("message", "Memory added successfully");
+            return response;
         } catch (Exception e) {
-            return Map.of(
-                "success", false,
-                "error", e.getMessage()
-            );
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("error", e.getMessage());
+            return errorResponse;
         }
     }
     
@@ -93,17 +94,17 @@ class MemoryController {
     public Map<String, Object> addBatchMemories(@RequestBody BatchMemoryRequest request) {
         try {
             List<String> memoryIds = mem0Client.addBatch(request.getTexts(), request.getUserId());
-            return Map.of(
-                "success", true,
-                "memoryIds", memoryIds,
-                "count", memoryIds.size(),
-                "message", "Batch memories added successfully"
-            );
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("memoryIds", memoryIds);
+            response.put("count", memoryIds.size());
+            response.put("message", "Batch memories added successfully");
+            return response;
         } catch (Exception e) {
-            return Map.of(
-                "success", false,
-                "error", e.getMessage()
-            );
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("error", e.getMessage());
+            return errorResponse;
         }
     }
     
@@ -119,16 +120,16 @@ class MemoryController {
                 request.getLimit()
             );
             
-            return Map.of(
-                "success", true,
-                "memories", memories,
-                "count", memories.size()
-            );
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("memories", memories);
+            response.put("count", memories.size());
+            return response;
         } catch (Exception e) {
-            return Map.of(
-                "success", false,
-                "error", e.getMessage()
-            );
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("error", e.getMessage());
+            return errorResponse;
         }
     }
     
@@ -139,16 +140,16 @@ class MemoryController {
     public Map<String, Object> getUserMemories(@PathVariable String userId) {
         try {
             List<Memory> memories = mem0Client.getAll(userId);
-            return Map.of(
-                "success", true,
-                "memories", memories,
-                "count", memories.size()
-            );
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("memories", memories);
+            response.put("count", memories.size());
+            return response;
         } catch (Exception e) {
-            return Map.of(
-                "success", false,
-                "error", e.getMessage()
-            );
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("error", e.getMessage());
+            return errorResponse;
         }
     }
     
@@ -161,15 +162,15 @@ class MemoryController {
             @RequestBody UpdateMemoryRequest request) {
         try {
             mem0Client.update(memoryId, request.getNewText(), request.getUserId());
-            return Map.of(
-                "success", true,
-                "message", "Memory updated successfully"
-            );
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Memory updated successfully");
+            return response;
         } catch (Exception e) {
-            return Map.of(
-                "success", false,
-                "error", e.getMessage()
-            );
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("error", e.getMessage());
+            return errorResponse;
         }
     }
     
@@ -180,15 +181,15 @@ class MemoryController {
     public Map<String, Object> deleteMemory(@PathVariable String memoryId) {
         try {
             mem0Client.delete(memoryId);
-            return Map.of(
-                "success", true,
-                "message", "Memory deleted successfully"
-            );
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Memory deleted successfully");
+            return response;
         } catch (Exception e) {
-            return Map.of(
-                "success", false,
-                "error", e.getMessage()
-            );
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("error", e.getMessage());
+            return errorResponse;
         }
     }
     
@@ -199,16 +200,16 @@ class MemoryController {
     public Map<String, Object> getMemoryHistory(@PathVariable String memoryId) {
         try {
             List<Memory> history = mem0Client.getHistory(memoryId);
-            return Map.of(
-                "success", true,
-                "history", history,
-                "count", history.size()
-            );
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("history", history);
+            response.put("count", history.size());
+            return response;
         } catch (Exception e) {
-            return Map.of(
-                "success", false,
-                "error", e.getMessage()
-            );
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("error", e.getMessage());
+            return errorResponse;
         }
     }
 }
