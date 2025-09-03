@@ -2,6 +2,7 @@ package com.mem0.unit;
 
 import com.mem0.config.Mem0Config;
 import com.mem0.core.MemoryService;
+import com.mem0.util.TestConfiguration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,11 +19,11 @@ import static org.junit.jupiter.api.Assertions.*;
  * 内存服务单元测试 - Unit tests for MemoryService class
  * 
  * <p>此测试类验证MemoryService的核心功能，包括内存的CRUD操作、搜索功能、批量处理、
- * 异步操作处理等。测试使用Mock提供者来避免对外部服务的依赖，确保测试的独立性和可靠性。</p>
+ * 异步操作处理等。测试使用统一的测试配置管理器获取Provider实例，确保测试的独立性和可靠性。</p>
  * 
  * <p>This test class verifies core functionalities of MemoryService, including memory CRUD operations,
- * search capabilities, batch processing, asynchronous operation handling, etc. Tests use Mock providers
- * to avoid external service dependencies, ensuring test independence and reliability.</p>
+ * search capabilities, batch processing, asynchronous operation handling, etc. Tests use unified test
+ * configuration manager to obtain Provider instances, ensuring test independence and reliability.</p>
  * 
  * <h3>测试覆盖范围 / Test Coverage:</h3>
  * <ul>
@@ -37,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * 
  * <h3>测试环境 / Test Environment:</h3>
  * <ul>
- *   <li>使用Mock提供者避免外部依赖 / Uses Mock providers to avoid external dependencies</li>
+ *   <li>使用统一配置管理器获取Provider / Uses unified configuration manager to obtain Providers</li>
  *   <li>每个测试独立的服务实例 / Independent service instance for each test</li>
  *   <li>自动资源清理和超时保护 / Automatic resource cleanup and timeout protection</li>
  *   <li>异常容错处理 / Exception-tolerant handling</li>
@@ -56,24 +57,17 @@ public class MemoryServiceTest {
     
     @BeforeEach
     void setUp() {
-        // Create configuration with mock providers for testing
-        Mem0Config config = new Mem0Config();
-        
-        // Configure mock embedding provider
-        config.getEmbedding().setProvider("mock");
-        
-        // Configure mock LLM provider
-        config.getLlm().setProvider("mock");
-        
-        // For testing, we'll need to create mock implementations that don't require actual databases
-        // In a real test environment, you might use TestContainers for integration tests
-        
-        // For now, we'll create the service and handle exceptions gracefully
+        // 使用TestConfiguration创建统一配置的MemoryService
         try {
+            Mem0Config config = TestConfiguration.createMem0Config();
             memoryService = new MemoryService(config);
+            
+            System.out.println("MemoryService initialized with providers:");
+            System.out.println("  LLM Provider available: " + TestConfiguration.isLLMProviderAvailable());
+            System.out.println("  Embedding Provider available: " + TestConfiguration.isEmbeddingProviderAvailable());
+            
         } catch (Exception e) {
-            // In case of connection issues, we'll create a minimal test setup
-            System.out.println("Warning: Could not initialize full MemoryService, some tests may be skipped");
+            System.out.println("Warning: Could not initialize MemoryService: " + e.getMessage());
         }
     }
     

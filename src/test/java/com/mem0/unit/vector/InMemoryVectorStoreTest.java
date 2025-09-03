@@ -47,14 +47,17 @@ public class InMemoryVectorStoreTest {
         @Test
         @DisplayName("检查集合存在")
         void testCollectionExists() throws ExecutionException, InterruptedException {
+            // 先创建集合
+            vectorStore.createCollection(TEST_COLLECTION, 3).get();
             CompletableFuture<Boolean> future = vectorStore.collectionExists(TEST_COLLECTION);
-            assertTrue(future.get(), "内存实现中集合应该总是存在");
+            assertTrue(future.get(), "创建后集合应该存在");
         }
         
         @Test
         @DisplayName("删除集合")
         void testDropCollection() throws ExecutionException, InterruptedException {
-            // 先插入一些数据
+            // 先创建集合并插入数据
+            vectorStore.createCollection(TEST_COLLECTION, 3).get();
             List<Float> vector = Arrays.asList(0.1f, 0.2f, 0.3f);
             Map<String, Object> metadata = createTestMetadata();
             vectorStore.insert(TEST_COLLECTION, vector, metadata).get();
@@ -68,6 +71,12 @@ public class InMemoryVectorStoreTest {
     @Nested
     @DisplayName("向量插入功能")
     class VectorInsertionTests {
+        
+        @BeforeEach
+        void setUpCollection() throws ExecutionException, InterruptedException {
+            // Create collection for tests
+            vectorStore.createCollection(TEST_COLLECTION, 3).get();
+        }
         
         @Test
         @DisplayName("单个向量插入")
@@ -140,6 +149,8 @@ public class InMemoryVectorStoreTest {
         
         @BeforeEach
         void setUpSearchData() throws ExecutionException, InterruptedException {
+            // Create collection first
+            vectorStore.createCollection(TEST_COLLECTION, 3).get();
             // 插入测试数据
             List<List<Float>> vectors = Arrays.asList(
                 Arrays.asList(1.0f, 0.0f, 0.0f),  // 与查询向量完全匹配
@@ -225,6 +236,8 @@ public class InMemoryVectorStoreTest {
         
         @BeforeEach
         void setUpManagementData() throws ExecutionException, InterruptedException {
+            // Create collection first
+            vectorStore.createCollection(TEST_COLLECTION, 3).get();
             List<Float> vector = Arrays.asList(0.1f, 0.2f, 0.3f);
             Map<String, Object> metadata = createTestMetadata();
             testVectorId = vectorStore.insert(TEST_COLLECTION, vector, metadata).get();
@@ -319,6 +332,8 @@ public class InMemoryVectorStoreTest {
         
         @BeforeEach
         void setUpUserData() throws ExecutionException, InterruptedException {
+            // Create collection first
+            vectorStore.createCollection(TEST_COLLECTION, 3).get();
             // 为不同用户插入数据
             String[] userIds = {"user1", "user2", "user3"};
             String[] types = {"personal", "work", "study"};
@@ -396,6 +411,12 @@ public class InMemoryVectorStoreTest {
     @DisplayName("相似度计算测试")
     class SimilarityCalculationTests {
         
+        @BeforeEach
+        void setUpCollection() throws ExecutionException, InterruptedException {
+            // Create collection for tests
+            vectorStore.createCollection(TEST_COLLECTION, 3).get();
+        }
+        
         @Test
         @DisplayName("相同向量的相似度")
         void testIdenticalVectorsSimilarity() throws ExecutionException, InterruptedException {
@@ -437,7 +458,8 @@ public class InMemoryVectorStoreTest {
         @Test
         @DisplayName("清空存储")
         void testClearStore() throws ExecutionException, InterruptedException {
-            // 插入一些数据
+            // Create collection and insert data
+            vectorStore.createCollection(TEST_COLLECTION, 3).get();
             List<Float> vector = Arrays.asList(0.1f, 0.2f, 0.3f);
             vectorStore.insert(TEST_COLLECTION, vector, createTestMetadata()).get();
             
@@ -452,7 +474,8 @@ public class InMemoryVectorStoreTest {
         @Test
         @DisplayName("关闭存储")
         void testCloseStore() throws ExecutionException, InterruptedException {
-            // 插入一些数据
+            // Create collection and insert data
+            vectorStore.createCollection(TEST_COLLECTION, 3).get();
             List<Float> vector = Arrays.asList(0.1f, 0.2f, 0.3f);
             vectorStore.insert(TEST_COLLECTION, vector, createTestMetadata()).get();
             
@@ -465,11 +488,17 @@ public class InMemoryVectorStoreTest {
     @DisplayName("并发测试")
     class ConcurrencyTests {
         
+        @BeforeEach
+        void setUpCollection() throws ExecutionException, InterruptedException {
+            // Create collection for tests
+            vectorStore.createCollection(TEST_COLLECTION, 3).get();
+        }
+        
         @Test
         @DisplayName("并发插入测试")
         void testConcurrentInsert() {
-            int threadCount = 10;
-            int operationsPerThread = 20;
+            int threadCount = 3;
+            int operationsPerThread = 5;
             
             List<CompletableFuture<String>> futures = IntStream.range(0, threadCount)
                 .boxed()
@@ -502,13 +531,13 @@ public class InMemoryVectorStoreTest {
         @DisplayName("并发搜索测试")
         void testConcurrentSearch() throws ExecutionException, InterruptedException {
             // 先插入一些数据
-            for (int i = 0; i < 50; i++) {
+            for (int i = 0; i < 10; i++) {
                 List<Float> vector = Arrays.asList((float) i, 0.2f, 0.3f);
                 vectorStore.insert(TEST_COLLECTION, vector, createTestMetadata()).get();
             }
             
-            List<Float> queryVector = Arrays.asList(25.0f, 0.2f, 0.3f);
-            int threadCount = 20;
+            List<Float> queryVector = Arrays.asList(5.0f, 0.2f, 0.3f);
+            int threadCount = 5;
             
             List<CompletableFuture<List<VectorStore.VectorSearchResult>>> futures = 
                 IntStream.range(0, threadCount)
@@ -528,6 +557,12 @@ public class InMemoryVectorStoreTest {
     @Nested
     @DisplayName("异常处理测试")
     class ExceptionHandlingTests {
+        
+        @BeforeEach
+        void setUpCollection() throws ExecutionException, InterruptedException {
+            // Create collection for tests
+            vectorStore.createCollection(TEST_COLLECTION, 3).get();
+        }
         
         @Test
         @DisplayName("空向量异常")

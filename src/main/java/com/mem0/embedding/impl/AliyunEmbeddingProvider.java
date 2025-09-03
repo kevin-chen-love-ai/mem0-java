@@ -27,7 +27,7 @@ import java.util.concurrent.TimeUnit;
  * 主要功能 / Key Features:
  * - 高质量中文语义嵌入向量生成 / High-quality Chinese semantic embedding generation
  * - 支持单个和批量文本处理 / Support for single and batch text processing
- * - 异步非阻塞处理 / Asynchronous non-blocking processing
+ * - 同步API调用，适配标准API权限 / Synchronous API calls compatible with standard API permissions
  * - 标准1536维向量输出 / Standard 1536-dimensional vector output
  * - 自动错误处理和重试机制 / Automatic error handling and retry mechanism
  * - 完整的健康状态检查 / Complete health status monitoring
@@ -189,7 +189,6 @@ public class AliyunEmbeddingProvider implements EmbeddingProvider {
                 .post(body)
                 .addHeader("Authorization", "Bearer " + apiKey)
                 .addHeader("Content-Type", "application/json")
-                .addHeader("X-DashScope-Async", "enable")
                 .build();
         
         IOException lastException = null;

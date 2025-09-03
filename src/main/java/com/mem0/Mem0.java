@@ -4,14 +4,13 @@ import com.mem0.config.Mem0Config;
 import com.mem0.core.*;
 import com.mem0.embedding.EmbeddingProvider;
 import com.mem0.embedding.impl.SimpleTFIDFEmbeddingProvider;
-import com.mem0.embedding.impl.OpenAIEmbeddingProvider;
 import com.mem0.llm.LLMProvider;
 import com.mem0.llm.impl.RuleBasedLLMProvider;
-import com.mem0.llm.OpenAIProvider;
 import com.mem0.store.VectorStore;
 import com.mem0.vector.impl.InMemoryVectorStore;
 import com.mem0.store.GraphStore;
-import com.mem0.store.Neo4jGraphStore;
+import com.mem0.graph.impl.DefaultInMemoryGraphStore;
+import com.mem0.factory.ProviderFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,10 +63,28 @@ import java.util.stream.Collectors;
  * String memoryId = mem0.add("用户喜欢喝咖啡", "user123").join();
  * List<EnhancedMemory> results = mem0.search("咖啡偏好", "user123").join();
  * 
+ * // 从配置文件初始化
+ * Mem0 mem0 = new Mem0("config/mem0.properties");
+ * 
  * // 配置构建器
  * Mem0 mem0 = Mem0.builder()
  *     .vectorStore("milvus", "localhost", 19530)
  *     .llm("openai", "your-api-key", "gpt-4")
+ *     .build();
+ * 
+ * // 使用Builder加载配置文件
+ * Mem0 mem0 = Mem0.builder()
+ *     .loadFromFile("mem0.properties")
+ *     .build();
+ * 
+ * // 从类路径加载配置
+ * Mem0 mem0 = Mem0.builder()
+ *     .loadFromClasspath("config/mem0.properties")
+ *     .build();
+ * 
+ * // 从环境变量加载配置
+ * Mem0 mem0 = Mem0.builder()
+ *     .loadFromEnvironment()
  *     .build();
  * 
  * // RAG查询
@@ -118,6 +135,16 @@ public class Mem0 implements AutoCloseable {
     }
     
     /**
+     * Create Mem0 instance from configuration file path
+     * 通过配置文件路径创建Mem0实例
+     * 
+     * @param configFilePath 配置文件路径 (Configuration file path)
+     */
+    public Mem0(String configFilePath) {
+        this(Mem0Config.fromFile(configFilePath));
+    }
+    
+    /**
      * Create Mem0 instance with direct provider injection
      */
     public Mem0(VectorStore vectorStore, GraphStore graphStore, 
@@ -151,13 +178,15 @@ public class Mem0 implements AutoCloseable {
      * Create Mem0 instance with custom configuration
      */
     public Mem0(Mem0Config config) {
+        // Validate configuration
+        ProviderFactory.validateConfiguration(config);
         this.config = config;
         
-        // Initialize core providers
-        this.vectorStore = createVectorStore(config.getVectorStore());
-        this.graphStore = createGraphStore(config.getGraphStore());
-        this.embeddingProvider = createEmbeddingProvider(config.getEmbedding());
-        this.llmProvider = createLLMProvider(config.getLlm());
+        // Initialize core providers using factory
+        this.vectorStore = ProviderFactory.createVectorStore(config.getVectorStore());
+        this.graphStore = ProviderFactory.createGraphStore(config.getGraphStore());
+        this.embeddingProvider = ProviderFactory.createEmbeddingProvider(config.getEmbedding());
+        this.llmProvider = ProviderFactory.createLLMProvider(config.getLlm());
         
         // Initialize memory management components
         this.memoryClassifier = new MemoryClassifier(llmProvider);
@@ -452,60 +481,11 @@ public class Mem0 implements AutoCloseable {
         }
     }
     
-    // ================== Factory Methods ==================
-    
-    private VectorStore createVectorStore(Mem0Config.VectorStoreConfig config) {
-        switch (config.getProvider().toLowerCase()) {
-            case "milvus":
-                logger.warn("Milvus provider not implemented, falling back to InMemory");
-                return new InMemoryVectorStore();
-            case "inmemory":
-            default:
-                return new InMemoryVectorStore();
-        }
-    }
-    
-    private GraphStore createGraphStore(Mem0Config.GraphStoreConfig config) {
-        switch (config.getProvider().toLowerCase()) {
-            case "neo4j":
-                logger.warn("Neo4j provider not implemented, falling back to InMemory");
-                return createDefaultGraphStore();
-            case "inmemory":
-            default:
-                return createDefaultGraphStore();
-        }
-    }
-    
-    private EmbeddingProvider createEmbeddingProvider(Mem0Config.EmbeddingConfig config) {
-        switch (config.getProvider().toLowerCase()) {
-            case "openai":
-                logger.warn("OpenAI provider requires API key, falling back to TFIDF");
-                return new SimpleTFIDFEmbeddingProvider();
-            case "tfidf":
-                return new SimpleTFIDFEmbeddingProvider();
-            case "mock":
-            default:
-                return new SimpleTFIDFEmbeddingProvider();
-        }
-    }
-    
-    private LLMProvider createLLMProvider(Mem0Config.LLMConfig config) {
-        switch (config.getProvider().toLowerCase()) {
-            case "openai":
-                logger.warn("OpenAI provider requires API key, falling back to RuleBased");
-                return new RuleBasedLLMProvider();
-            case "rulebased":
-                return new RuleBasedLLMProvider();
-            case "mock":
-            default:
-                return new RuleBasedLLMProvider();
-        }
-    }
     
     // ================== Builder Pattern ==================
     
     public static class Builder {
-        private final Mem0Config config = new Mem0Config();
+        private Mem0Config config = new Mem0Config();
         private VectorStore vectorStore;
         private GraphStore graphStore;
         private EmbeddingProvider embeddingProvider;
@@ -576,6 +556,77 @@ public class Mem0 implements AutoCloseable {
             return this;
         }
         
+        /**
+         * Load configuration from file
+         * 从配置文件加载配置
+         * 
+         * @param configFilePath 配置文件路径
+         * @return Builder实例
+         */
+        public Builder loadFromFile(String configFilePath) {
+            this.config = Mem0Config.fromFile(configFilePath);
+            return this;
+        }
+        
+        /**
+         * Load configuration from classpath
+         * 从类路径加载配置
+         * 
+         * @param resourcePath 资源路径
+         * @return Builder实例
+         */
+        public Builder loadFromClasspath(String resourcePath) {
+            this.config = Mem0Config.fromClasspath(resourcePath);
+            return this;
+        }
+        
+        /**
+         * Load configuration from Properties
+         * 从Properties对象加载配置
+         * 
+         * @param properties Properties对象
+         * @return Builder实例
+         */
+        public Builder loadFromProperties(java.util.Properties properties) {
+            this.config = Mem0Config.fromProperties(properties);
+            return this;
+        }
+        
+        /**
+         * Load configuration from Map
+         * 从Map对象加载配置
+         * 
+         * @param configMap 配置Map
+         * @return Builder实例
+         */
+        public Builder loadFromMap(Map<String, Object> configMap) {
+            this.config = Mem0Config.fromMap(configMap);
+            return this;
+        }
+        
+        /**
+         * Load configuration from environment variables
+         * 从环境变量加载配置
+         * 
+         * @return Builder实例
+         */
+        public Builder loadFromEnvironment() {
+            this.config = Mem0Config.fromEnvironment();
+            return this;
+        }
+        
+        /**
+         * Set custom configuration
+         * 设置自定义配置
+         * 
+         * @param config 配置对象
+         * @return Builder实例
+         */
+        public Builder config(Mem0Config config) {
+            this.config = config;
+            return this;
+        }
+        
         public Mem0 build() {
             if (vectorStore != null || graphStore != null || embeddingProvider != null || llmProvider != null) {
                 return new Mem0(vectorStore, graphStore, embeddingProvider, llmProvider);
@@ -633,158 +684,9 @@ public class Mem0 implements AutoCloseable {
     }
     
     /**
-     * Create a default GraphStore implementation for compilation compatibility
+     * Create a default GraphStore implementation
      */
     private GraphStore createDefaultGraphStore() {
-        // For now, use an in-memory implementation that's compatible with store.GraphStore interface
-        return new GraphStore() {
-            private final java.util.concurrent.ConcurrentHashMap<String, Object> nodes = new java.util.concurrent.ConcurrentHashMap<>();
-            
-            @Override
-            public java.util.concurrent.CompletableFuture<String> createNode(String label, java.util.Map<String, Object> properties) {
-                String id = java.util.UUID.randomUUID().toString();
-                nodes.put(id, properties);
-                return java.util.concurrent.CompletableFuture.completedFuture(id);
-            }
-            
-            @Override
-            public java.util.concurrent.CompletableFuture<java.util.List<com.mem0.store.GraphStore.GraphNode>> getNodesByLabel(String label, java.util.Map<String, Object> filter) {
-                return java.util.concurrent.CompletableFuture.completedFuture(new java.util.ArrayList<>());
-            }
-            
-            @Override
-            public java.util.concurrent.CompletableFuture<String> createRelationship(String sourceId, String targetId, String type, java.util.Map<String, Object> properties) {
-                return java.util.concurrent.CompletableFuture.completedFuture(java.util.UUID.randomUUID().toString());
-            }
-            
-            @Override
-            public java.util.concurrent.CompletableFuture<java.util.List<com.mem0.store.GraphStore.GraphNode>> findConnectedNodes(String nodeId, String relationshipType, int maxHops) {
-                return java.util.concurrent.CompletableFuture.completedFuture(new java.util.ArrayList<>());
-            }
-            
-            @Override
-            public java.util.concurrent.CompletableFuture<Void> deleteNode(String nodeId) {
-                nodes.remove(nodeId);
-                return java.util.concurrent.CompletableFuture.completedFuture(null);
-            }
-            
-            @Override
-            public java.util.concurrent.CompletableFuture<Void> close() {
-                nodes.clear();
-                return java.util.concurrent.CompletableFuture.completedFuture(null);
-            }
-            
-            @Override
-            public java.util.concurrent.CompletableFuture<java.util.List<java.util.Map<String, Object>>> executeQuery(String query, java.util.Map<String, Object> parameters) {
-                // Simple in-memory implementation that returns empty results
-                return java.util.concurrent.CompletableFuture.completedFuture(new java.util.ArrayList<>());
-            }
-            
-            @Override
-            public java.util.concurrent.CompletableFuture<Void> deleteRelationship(String relationshipId) {
-                // Simple implementation that just returns success
-                return java.util.concurrent.CompletableFuture.completedFuture(null);
-            }
-            
-            @Override
-            public java.util.concurrent.CompletableFuture<Void> updateRelationship(String relationshipId, java.util.Map<String, Object> properties) {
-                // Simple implementation that just returns success
-                return java.util.concurrent.CompletableFuture.completedFuture(null);
-            }
-            
-            @Override
-            public java.util.concurrent.CompletableFuture<Void> updateNode(String nodeId, java.util.Map<String, Object> properties) {
-                // Simple implementation that just updates the node in memory
-                if (nodes.containsKey(nodeId)) {
-                    nodes.put(nodeId, properties);
-                }
-                return java.util.concurrent.CompletableFuture.completedFuture(null);
-            }
-            
-            @Override
-            public java.util.concurrent.CompletableFuture<java.util.List<com.mem0.store.GraphStore.GraphRelationship>> getRelationships(String nodeId, String relationshipType) {
-                // Simple implementation that returns empty relationships
-                return java.util.concurrent.CompletableFuture.completedFuture(new java.util.ArrayList<>());
-            }
-            
-            @Override
-            public java.util.concurrent.CompletableFuture<com.mem0.store.GraphStore.GraphNode> getNode(String nodeId) {
-                // Simple implementation that returns a node if it exists
-                if (nodes.containsKey(nodeId)) {
-                    Map<String, Object> properties = (Map<String, Object>) nodes.get(nodeId);
-                    java.util.List<String> labels = new java.util.ArrayList<>();
-                    labels.add("Memory"); // Default label
-                    return java.util.concurrent.CompletableFuture.completedFuture(
-                        new com.mem0.store.GraphStore.GraphNode(nodeId, labels, properties)
-                    );
-                }
-                return java.util.concurrent.CompletableFuture.completedFuture(null);
-            }
-            
-            // Memory-specific methods implementation
-            
-            @Override
-            public java.util.concurrent.CompletableFuture<Void> addMemory(com.mem0.core.EnhancedMemory memory) {
-                // Simple implementation that stores memory properties
-                if (memory != null) {
-                    java.util.Map<String, Object> properties = new java.util.HashMap<>();
-                    properties.put("id", memory.getId());
-                    properties.put("content", memory.getContent());
-                    properties.put("userId", memory.getUserId());
-                    nodes.put(memory.getId(), properties);
-                }
-                return java.util.concurrent.CompletableFuture.completedFuture(null);
-            }
-            
-            @Override
-            public java.util.concurrent.CompletableFuture<com.mem0.core.EnhancedMemory> getMemory(String memoryId) {
-                // Simple implementation that returns null (since this is a fallback)
-                return java.util.concurrent.CompletableFuture.completedFuture(null);
-            }
-            
-            @Override
-            public java.util.concurrent.CompletableFuture<Void> updateMemory(com.mem0.core.EnhancedMemory memory) {
-                // Simple implementation that updates memory properties
-                if (memory != null) {
-                    java.util.Map<String, Object> properties = new java.util.HashMap<>();
-                    properties.put("id", memory.getId());
-                    properties.put("content", memory.getContent());
-                    properties.put("userId", memory.getUserId());
-                    nodes.put(memory.getId(), properties);
-                }
-                return java.util.concurrent.CompletableFuture.completedFuture(null);
-            }
-            
-            @Override
-            public java.util.concurrent.CompletableFuture<Void> deleteMemory(String memoryId) {
-                nodes.remove(memoryId);
-                return java.util.concurrent.CompletableFuture.completedFuture(null);
-            }
-            
-            @Override
-            public java.util.concurrent.CompletableFuture<java.util.List<com.mem0.core.EnhancedMemory>> getUserMemories(String userId) {
-                // Simple implementation that returns empty list
-                return java.util.concurrent.CompletableFuture.completedFuture(new java.util.ArrayList<>());
-            }
-            
-            @Override
-            public java.util.concurrent.CompletableFuture<java.util.List<com.mem0.core.EnhancedMemory>> getMemoryHistory(String userId) {
-                // Simple implementation that returns empty list
-                return java.util.concurrent.CompletableFuture.completedFuture(new java.util.ArrayList<>());
-            }
-            
-            @Override
-            public java.util.concurrent.CompletableFuture<java.util.List<com.mem0.core.EnhancedMemory>> searchMemories(String query, String userId, int limit) {
-                // Simple implementation that returns empty list
-                return java.util.concurrent.CompletableFuture.completedFuture(new java.util.ArrayList<>());
-            }
-            
-            @Override
-            public java.util.concurrent.CompletableFuture<Void> addRelationship(String fromMemoryId, String toMemoryId, 
-                                                                              String relationshipType, java.util.Map<String, Object> properties) {
-                // Simple implementation that just returns success
-                return java.util.concurrent.CompletableFuture.completedFuture(null);
-            }
-        };
+        return new DefaultInMemoryGraphStore();
     }
 }

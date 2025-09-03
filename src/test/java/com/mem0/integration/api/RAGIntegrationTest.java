@@ -2,11 +2,12 @@ package com.mem0.integration.api;
 
 import com.mem0.config.Mem0Config;
 import com.mem0.core.MemoryService;
-import com.mem0.embedding.impl.MockEmbeddingProvider;
-import com.mem0.llm.MockLLMProvider;
+import com.mem0.embedding.EmbeddingProvider;
+import com.mem0.llm.LLMProvider;
 import com.mem0.template.ChatRAGPromptTemplate;
 import com.mem0.template.DefaultRAGPromptTemplate;
 import com.mem0.template.PromptTemplate;
+import com.mem0.util.TestConfiguration;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,8 +21,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class RAGIntegrationTest {
     
-    private MockEmbeddingProvider embeddingProvider;
-    private MockLLMProvider llmProvider;
+    private EmbeddingProvider embeddingProvider;
+    private LLMProvider llmProvider;
     private DefaultRAGPromptTemplate promptTemplate;
     private ChatRAGPromptTemplate chatPromptTemplate;
     
@@ -43,8 +44,8 @@ public class RAGIntegrationTest {
     
     @BeforeEach
     void setUp() {
-        embeddingProvider = new MockEmbeddingProvider();
-        llmProvider = new MockLLMProvider();
+        embeddingProvider = TestConfiguration.getEmbeddingProvider();
+        llmProvider = TestConfiguration.getLLMProvider();
         promptTemplate = new DefaultRAGPromptTemplate();
         chatPromptTemplate = new ChatRAGPromptTemplate();
     }
@@ -52,6 +53,10 @@ public class RAGIntegrationTest {
     @Test
     @Timeout(10)
     void testEmbeddingProviderIntegration() throws Exception {
+        if (TestConfiguration.shouldSkipTest("testEmbeddingProviderIntegration", false, true)) {
+            return;
+        }
+        
         // Test that embeddings are consistent and properly normalized
         String text1 = "The user prefers coffee over tea";
         String text2 = "User likes to work late at night";

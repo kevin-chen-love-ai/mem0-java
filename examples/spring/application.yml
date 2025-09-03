@@ -1,0 +1,93 @@
+# Spring Boot配置文件 - Spring Boot Configuration
+# application.yml
+
+server:
+  port: 8080
+  servlet:
+    context-path: /mem0
+
+spring:
+  application:
+    name: mem0-spring-example
+  
+  # 数据源配置（可选）
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: password
+  
+  # JPA配置（可选）
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+
+# Mem0自定义配置
+mem0:
+  # LLM配置
+  llm:
+    provider: openai
+    api-key: ${OPENAI_API_KEY:your-openai-api-key}
+    model: gpt-4
+    temperature: 0.7
+    max-tokens: 1000
+  
+  # 嵌入模型配置
+  embedding:
+    provider: openai
+    model: text-embedding-ada-002
+    batch-size: 100
+    cache-enabled: true
+  
+  # 向量数据库配置
+  vector:
+    provider: inmemory
+    # provider: pinecone  # 或其他向量数据库
+    # api-key: ${PINECONE_API_KEY}
+    # environment: ${PINECONE_ENVIRONMENT}
+    # index-name: mem0-index
+  
+  # 图数据库配置
+  graph:
+    provider: inmemory
+    # provider: neo4j
+    # uri: bolt://localhost:7687
+    # username: neo4j
+    # password: ${NEO4J_PASSWORD}
+  
+  # 缓存配置
+  cache:
+    provider: inmemory
+    # provider: redis
+    # host: localhost
+    # port: 6379
+    # password: ${REDIS_PASSWORD}
+    # database: 0
+    ttl: 3600  # 缓存TTL（秒）
+  
+  # 应用配置
+  application:
+    name: mem0-spring-app
+    environment: development
+    version: 1.0.0
+  
+  # 性能配置
+  performance:
+    max-concurrent-requests: 100
+    request-timeout: 30000
+    batch-size: 50
+    enable-metrics: true
+
+# 日志配置
+logging:
+  level:
+    com.mem0: DEBUG
+    org.springframework: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/mem0-spring-app.log
+

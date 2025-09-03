@@ -501,3 +501,4 @@ public class MilvusVectorStore implements VectorStore {
         return collectionStorage != null ? collectionStorage.size() : 0;
     }
 }
+

@@ -57,6 +57,7 @@ public class InMemoryVectorStore implements VectorStore {
     
     private final Map<String, VectorEntry> vectors = new ConcurrentHashMap<>();
     private final Map<String, List<String>> userMemories = new ConcurrentHashMap<>();
+    private final Map<String, Integer> collections = new ConcurrentHashMap<>();
     
     private static class VectorEntry {
         final String id;
@@ -78,11 +79,18 @@ public class InMemoryVectorStore implements VectorStore {
                 throw new MemoryValidationException("Collection name cannot be null or empty");
             }
             if (dimension <= 0 || dimension > MemoryConstants.MAX_VECTOR_DIMENSION) {
-                throw new MemoryValidationException("Dimension must be between 1 and " + MemoryConstants.MAX_VECTOR_DIMENSION);
+                throw new MemoryValidationException("维度必须在1到" + MemoryConstants.MAX_VECTOR_DIMENSION + "之间");
             }
             
+            // Check if collection already exists
+            if (collections.containsKey(collectionName)) {
+                throw new MemoryValidationException("集合'" + collectionName + "'已存在");
+            }
+            
+            // Create collection by storing its dimension
+            collections.put(collectionName, dimension);
+            
             logger.debug("创建向量集合: {} (维度: {})", collectionName, dimension);
-            // 内存实现中，集合是动态创建的
             return null;
         });
     }
@@ -95,7 +103,8 @@ public class InMemoryVectorStore implements VectorStore {
                 throw new IllegalArgumentException("Collection name cannot be null or empty");
             }
             
-            return true; // 内存实现中集合总是存在
+            // Check if collection was explicitly created
+            return collections.containsKey(collectionName);
         });
     }
     
@@ -108,7 +117,14 @@ public class InMemoryVectorStore implements VectorStore {
             }
             
             logger.debug("删除向量集合: {}", collectionName);
-            clear(); // 清空所有数据
+            
+            // Remove collection from tracking
+            collections.remove(collectionName);
+            
+            // Remove only vectors belonging to this collection
+            vectors.entrySet().removeIf(entry -> 
+                collectionName.equals(entry.getValue().properties.get("collection")));
+            
             return null;
         });
     }
@@ -129,11 +145,15 @@ public class InMemoryVectorStore implements VectorStore {
                     embedding[i] = vector.get(i);
                 }
                 
-                VectorEntry entry = new VectorEntry(id, embedding, metadata);
+                // Add collection info to metadata
+                Map<String, Object> fullMetadata = new java.util.HashMap<>(metadata != null ? metadata : new java.util.HashMap<>());
+                fullMetadata.put("collection", collectionName);
+                
+                VectorEntry entry = new VectorEntry(id, embedding, fullMetadata);
                 vectors.put(id, entry);
                 
                 // 按用户跟踪
-                String userId = (String) metadata.get("userId");
+                String userId = (String) fullMetadata.get("userId");
                 if (userId != null) {
                     userMemories.compute(userId, (k, v) -> {
                         List<String> userMems = v;
@@ -173,7 +193,7 @@ public class InMemoryVectorStore implements VectorStore {
                 throw new MemoryValidationException("Metadata list cannot be null");
             }
             if (vectors.size() != metadataList.size()) {
-                throw new MemoryValidationException("向量和元数据列表大小不匹配");
+                throw new MemoryValidationException("向量和元数据数量不匹配");
             }
             if (vectors.size() > MemoryConstants.MAX_BATCH_SIZE) { // Reasonable batch size limit
                 throw new MemoryValidationException("Batch size too large (max " + MemoryConstants.MAX_BATCH_SIZE + " vectors)");
@@ -751,6 +771,7 @@ public class InMemoryVectorStore implements VectorStore {
         logger.info("Clearing all vectors from store");
         vectors.clear();
         userMemories.clear();
+        collections.clear();
     }
     
     // Input validation methods
@@ -763,12 +784,23 @@ public class InMemoryVectorStore implements VectorStore {
             throw new MemoryValidationException("Collection name too long (max " + MemoryConstants.MAX_COLLECTION_NAME_LENGTH + " characters)");
         }
         
+        // Check if collection exists
+        Integer expectedDimension = collections.get(collectionName);
+        if (expectedDimension == null) {
+            throw new MemoryValidationException("集合不存在: " + collectionName);
+        }
+        
         if (vector == null || vector.isEmpty()) {
             throw new MemoryValidationException("Vector cannot be null or empty");
         }
         
         if (vector.size() > MemoryConstants.MAX_VECTOR_DIMENSION) { // Reasonable limit for vector dimensions
             throw new MemoryValidationException("Vector dimension too large (max " + MemoryConstants.MAX_VECTOR_DIMENSION + ")");
+        }
+        
+        // Check if vector dimension matches collection dimension
+        if (vector.size() != expectedDimension) {
+            throw new MemoryValidationException("向量维度不匹配: 期望 " + expectedDimension + ", 实际 " + vector.size());
         }
         
         // Check for null values in vector
@@ -839,9 +871,14 @@ public class InMemoryVectorStore implements VectorStore {
                     if (!Double.isFinite(numValue.doubleValue())) {
                         throw new MemoryValidationException("Metadata numeric value is invalid for key: " + key);
                     }
-                } else if (!(value instanceof Boolean)) {
-                    // Only allow String, Number, Boolean, and null values
-                    throw new MemoryValidationException("Unsupported metadata value type for key '" + key + "': " + value.getClass().getSimpleName());
+                } else if (value instanceof Boolean) {
+                    // Boolean is allowed
+                } else if (value instanceof java.util.Map || value instanceof java.util.List) {
+                    // Allow complex objects like Map and List for flexible metadata
+                    // In production, you might want to serialize these to JSON strings
+                } else {
+                    // Allow other types but warn about potential serialization issues
+                    logger.debug("Metadata contains non-primitive type for key '{}': {}", key, value.getClass().getSimpleName());
                 }
             }
         }
