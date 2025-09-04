@@ -1,121 +1,71 @@
-package examples.vector;
+package com.mem0.examples.vector;
 
 import com.mem0.Mem0;
-import com.mem0.config.Mem0Configuration;
 import com.mem0.store.VectorStore;
-import com.mem0.store.VectorStore.VectorEntry;
-import com.mem0.store.VectorStore.SearchResult;
+import com.mem0.model.VectorEntry;
+import com.mem0.core.EnhancedMemory;
 import com.mem0.embedding.impl.MockEmbeddingProvider;
 import com.mem0.llm.MockLLMProvider;
+import com.mem0.vector.impl.InMemoryVectorStore;
+import com.mem0.graph.impl.DefaultInMemoryGraphStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-// Note: This example requires HTTP client library for Java 8 compatibility
-// You can use OkHttp or Apache HttpClient instead of java.net.http
-// import okhttp3.*;
-import java.net.URI;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * 向量数据库集成示例 - Vector Database Integration Example
  * 
- * 展示如何集成不同的向量数据库：Pinecone、Weaviate、Qdrant等
- * Demonstrates integration with various vector databases: Pinecone, Weaviate, Qdrant, etc.
+ * 展示如何集成不同的向量数据库和自定义向量存储
+ * Demonstrates integration with vector databases and custom vector stores
  * 
- * NOTE: This example is for demonstration purposes only. For Java 8 compatibility,
- * replace java.net.http with OkHttp or Apache HttpClient:
- * 
- * <dependency>
- *     <groupId>com.squareup.okhttp3</groupId>
- *     <artifactId>okhttp</artifactId>
- *     <version>4.10.0</version>
- * </dependency>
+ * NOTE: These are simplified demo implementations showing the integration patterns.
+ * For production use, implement with proper HTTP clients and error handling.
  */
 public class VectorDatabaseExample {
     
     public static void main(String[] args) throws Exception {
         System.out.println("=== Vector Database Integration Example ===\n");
         
-        // 1. Pinecone集成示例
-        System.out.println("1. Testing Pinecone Integration:");
-        testPineconeIntegration();
+        // 1. 内存向量存储示例
+        System.out.println("1. Testing In-Memory Vector Store:");
+        testInMemoryVectorStore();
         
-        // 2. Weaviate集成示例
-        System.out.println("\n2. Testing Weaviate Integration:");
-        testWeaviateIntegration();
-        
-        // 3. Qdrant集成示例
-        System.out.println("\n3. Testing Qdrant Integration:");
-        testQdrantIntegration();
-        
-        // 4. 自定义向量存储示例
-        System.out.println("\n4. Testing Custom Vector Store:");
+        // 2. 自定义向量存储示例  
+        System.out.println("\n2. Testing Custom Vector Store:");
         testCustomVectorStore();
         
         System.out.println("\n=== Example completed successfully! ===");
     }
     
-    private static void testPineconeIntegration() throws Exception {
-        Mem0Configuration config = new Mem0Configuration();
-        config.setVectorStore(new PineconeVectorStore(
-            "your-pinecone-api-key",
-            "your-environment", 
-            "mem0-index"
-        ));
-        config.setLlmProvider(new MockLLMProvider());
-        config.setEmbeddingProvider(new MockEmbeddingProvider());
+    private static void testInMemoryVectorStore() throws Exception {
+        Mem0 mem0 = Mem0.builder()
+            .vectorStore(new InMemoryVectorStore())
+            .graphStore(new DefaultInMemoryGraphStore())
+            .llmProvider(new MockLLMProvider())
+            .embeddingProvider(new MockEmbeddingProvider())
+            .build();
         
-        Mem0 mem0 = new Mem0(config);
+        String memoryId = mem0.add("In-memory vector store is fast for development", "inmemory-user").get();
+        System.out.println("   ✓ Added memory to in-memory store: " + memoryId);
         
-        String memoryId = mem0.add("Pinecone is a vector database service", "pinecone-user");
-        System.out.println("   ✓ Added memory to Pinecone: " + memoryId);
-        
-        List<com.mem0.core.Memory> results = mem0.search("vector database", "pinecone-user");
+        List<EnhancedMemory> results = mem0.search("vector store", "inmemory-user", 5).get();
         System.out.println("   ✓ Search returned " + results.size() + " results");
         
         mem0.close();
     }
     
-    private static void testWeaviateIntegration() throws Exception {
-        Mem0Configuration config = new Mem0Configuration();
-        config.setVectorStore(new WeaviateVectorStore("http://localhost:8080", "your-api-key"));
-        config.setLlmProvider(new MockLLMProvider());
-        config.setEmbeddingProvider(new MockEmbeddingProvider());
-        
-        Mem0 mem0 = new Mem0(config);
-        
-        String memoryId = mem0.add("Weaviate is an open-source vector search engine", "weaviate-user");
-        System.out.println("   ✓ Added memory to Weaviate: " + memoryId);
-        
-        mem0.close();
-    }
-    
-    private static void testQdrantIntegration() throws Exception {
-        Mem0Configuration config = new Mem0Configuration();
-        config.setVectorStore(new QdrantVectorStore("http://localhost:6333", "your-api-key"));
-        config.setLlmProvider(new MockLLMProvider());
-        config.setEmbeddingProvider(new MockEmbeddingProvider());
-        
-        Mem0 mem0 = new Mem0(config);
-        
-        String memoryId = mem0.add("Qdrant provides high-performance vector similarity search", "qdrant-user");
-        System.out.println("   ✓ Added memory to Qdrant: " + memoryId);
-        
-        mem0.close();
-    }
-    
     private static void testCustomVectorStore() throws Exception {
-        Mem0Configuration config = new Mem0Configuration();
-        config.setVectorStore(new CustomVectorStore());
-        config.setLlmProvider(new MockLLMProvider());
-        config.setEmbeddingProvider(new MockEmbeddingProvider());
+        Mem0 mem0 = Mem0.builder()
+            .vectorStore(new CustomVectorStore())
+            .graphStore(new DefaultInMemoryGraphStore()) 
+            .llmProvider(new MockLLMProvider())
+            .embeddingProvider(new MockEmbeddingProvider())
+            .build();
         
-        Mem0 mem0 = new Mem0(config);
-        
-        String memoryId = mem0.add("Custom vector stores allow flexible implementations", "custom-user");
+        String memoryId = mem0.add("Custom vector stores allow flexible implementations", "custom-user").get();
         System.out.println("   ✓ Added memory to custom vector store: " + memoryId);
         
         mem0.close();
@@ -123,560 +73,8 @@ public class VectorDatabaseExample {
 }
 
 /**
- * Pinecone向量存储实现 - Pinecone Vector Store Implementation
- */
-class PineconeVectorStore implements VectorStore {
-    private static final Logger logger = LoggerFactory.getLogger(PineconeVectorStore.class);
-    
-    private final String apiKey;
-    private final String environment;
-    private final String indexName;
-    // Note: For Java 8 compatibility, use OkHttp or Apache HttpClient
-    // private final OkHttpClient httpClient;
-    private final ObjectMapper objectMapper;
-    
-    public PineconeVectorStore(String apiKey, String environment, String indexName) {
-        this.apiKey = apiKey;
-        this.environment = environment;
-        this.indexName = indexName;
-        // this.httpClient = new OkHttpClient.Builder()
-        //         .connectTimeout(30, TimeUnit.SECONDS)
-        //         .build();
-        this.objectMapper = new ObjectMapper();
-    }
-    
-    @Override
-    public CompletableFuture<String> insertVector(String id, List<Float> embedding, 
-                                                 Map<String, Object> metadata, String userId) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                // Create metadata map for Java 8 compatibility
-                Map<String, Object> metadataMap = new HashMap<>();
-                metadataMap.put("userId", userId);
-                metadataMap.put("content", metadata.getOrDefault("content", ""));
-                metadataMap.put("timestamp", System.currentTimeMillis());
-                
-                // Create vector map for Java 8 compatibility
-                Map<String, Object> vector = new HashMap<>();
-                vector.put("id", id);
-                vector.put("values", embedding);
-                vector.put("metadata", metadataMap);
-                
-                Map<String, Object> requestBody = new HashMap<>();
-                requestBody.put("vectors", Arrays.asList(vector));
-                
-                String url = String.format("https://%s-%s.svc.%s.pinecone.io/vectors/upsert", 
-                                          indexName, environment, environment);
-                
-                HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create(url))
-                        .header("Content-Type", "application/json")
-                        .header("Api-Key", apiKey)
-                        .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)))
-                        .build();
-                
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-                
-                if (response.statusCode() != 200) {
-                    throw new RuntimeException("Pinecone upsert failed: " + response.body());
-                }
-                
-                logger.debug("Successfully inserted vector into Pinecone: {}", id);
-                return id;
-                
-            } catch (Exception e) {
-                logger.error("Error inserting vector into Pinecone", e);
-                throw new RuntimeException("Pinecone insertion failed", e);
-            }
-        });
-    }
-    
-    @Override
-    public CompletableFuture<List<SearchResult>> searchVectors(List<Float> queryEmbedding, 
-                                                              String userId, int limit) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                // Create filter map for Java 8 compatibility
-                Map<String, Object> filter = new HashMap<>();
-                filter.put("userId", userId);
-                
-                // Create request body for Java 8 compatibility
-                Map<String, Object> requestBody = new HashMap<>();
-                requestBody.put("vector", queryEmbedding);
-                requestBody.put("topK", limit);
-                requestBody.put("includeMetadata", true);
-                requestBody.put("filter", filter);
-                
-                String url = String.format("https://%s-%s.svc.%s.pinecone.io/query", 
-                                          indexName, environment, environment);
-                
-                HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create(url))
-                        .header("Content-Type", "application/json")
-                        .header("Api-Key", apiKey)
-                        .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)))
-                        .build();
-                
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-                
-                if (response.statusCode() != 200) {
-                    throw new RuntimeException("Pinecone query failed: " + response.body());
-                }
-                
-                Map<String, Object> responseBody = objectMapper.readValue(response.body(), Map.class);
-                List<Map<String, Object>> matches = (List<Map<String, Object>>) responseBody.get("matches");
-                
-                return matches.stream()
-                        .map(match -> {
-                            String id = (String) match.get("id");
-                            double score = ((Number) match.get("score")).doubleValue();
-                            Map<String, Object> metadata = (Map<String, Object>) match.get("metadata");
-                            
-                            return new SearchResult(id, score, metadata);
-                        })
-                        .collect(java.util.stream.Collectors.toList());
-                
-            } catch (Exception e) {
-                logger.error("Error querying Pinecone", e);
-                throw new RuntimeException("Pinecone query failed", e);
-            }
-        });
-    }
-    
-    @Override
-    public CompletableFuture<Void> deleteVector(String id, String userId) {
-        return CompletableFuture.runAsync(() -> {
-            try {
-                Map<String, Object> requestBody = new HashMap<>();
-                requestBody.put("ids", Arrays.asList(id));
-                
-                String url = String.format("https://%s-%s.svc.%s.pinecone.io/vectors/delete", 
-                                          indexName, environment, environment);
-                
-                HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create(url))
-                        .header("Content-Type", "application/json")
-                        .header("Api-Key", apiKey)
-                        .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)))
-                        .build();
-                
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-                
-                if (response.statusCode() != 200) {
-                    throw new RuntimeException("Pinecone delete failed: " + response.body());
-                }
-                
-                logger.debug("Successfully deleted vector from Pinecone: {}", id);
-                
-            } catch (Exception e) {
-                logger.error("Error deleting vector from Pinecone", e);
-                throw new RuntimeException("Pinecone deletion failed", e);
-            }
-        });
-    }
-    
-    @Override
-    public CompletableFuture<Void> close() {
-        return CompletableFuture.completedFuture(null);
-    }
-    
-    @Override
-    public CompletableFuture<Void> updateVector(String id, List<Float> embedding, 
-                                               Map<String, Object> metadata, String userId) {
-        return insertVector(id, embedding, metadata, userId).thenApply(result -> null);
-    }
-    
-    @Override
-    public CompletableFuture<VectorEntry> getVector(String id, String userId) {
-        return CompletableFuture.completedFuture(null); // Pinecone doesn't support direct get by ID
-    }
-    
-    @Override
-    public CompletableFuture<List<VectorEntry>> getAllVectors(String userId) {
-        return CompletableFuture.completedFuture(Collections.emptyList()); // Expensive operation in Pinecone
-    }
-    
-    @Override
-    public CompletableFuture<Long> getVectorCount(String userId) {
-        return CompletableFuture.completedFuture(0L); // Requires separate stats API call
-    }
-}
-
-/**
- * Weaviate向量存储实现 - Weaviate Vector Store Implementation
- */
-class WeaviateVectorStore implements VectorStore {
-    private static final Logger logger = LoggerFactory.getLogger(WeaviateVectorStore.class);
-    
-    private final String endpoint;
-    private final String apiKey;
-    // Note: For Java 8 compatibility, use OkHttp or Apache HttpClient
-    // private final OkHttpClient httpClient;
-    private final ObjectMapper objectMapper;
-    private final String className = "MemoryVector";
-    
-    public WeaviateVectorStore(String endpoint, String apiKey) {
-        this.endpoint = endpoint.endsWith("/") ? endpoint : endpoint + "/";
-        this.apiKey = apiKey;
-        // this.httpClient = new OkHttpClient.Builder()
-        //         .connectTimeout(30, TimeUnit.SECONDS)
-        //         .build();
-        this.objectMapper = new ObjectMapper();
-    }
-    
-    @Override
-    public CompletableFuture<String> insertVector(String id, List<Float> embedding, 
-                                                 Map<String, Object> metadata, String userId) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                Map<String, Object> properties = new HashMap<>(metadata);
-                properties.put("userId", userId);
-                properties.put("vectorId", id);
-                
-                // Create object map for Java 8 compatibility
-                Map<String, Object> object = new HashMap<>();
-                object.put("class", className);
-                object.put("id", id);
-                object.put("properties", properties);
-                object.put("vector", embedding);
-                
-                HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create(endpoint + "v1/objects"))
-                        .header("Content-Type", "application/json")
-                        .header("Authorization", "Bearer " + apiKey)
-                        .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(object)))
-                        .build();
-                
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-                
-                if (response.statusCode() != 200) {
-                    throw new RuntimeException("Weaviate insert failed: " + response.body());
-                }
-                
-                logger.debug("Successfully inserted vector into Weaviate: {}", id);
-                return id;
-                
-            } catch (Exception e) {
-                logger.error("Error inserting vector into Weaviate", e);
-                throw new RuntimeException("Weaviate insertion failed", e);
-            }
-        });
-    }
-    
-    @Override
-    public CompletableFuture<List<SearchResult>> searchVectors(List<Float> queryEmbedding, 
-                                                              String userId, int limit) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                String graphql = String.format("""
-                    {
-                      Get {
-                        %s(
-                          nearVector: {
-                            vector: %s
-                          }
-                          where: {
-                            path: ["userId"]
-                            operator: Equal
-                            valueString: "%s"
-                          }
-                          limit: %d
-                        ) {
-                          vectorId
-                          content
-                          _additional {
-                            certainty
-                            vector
-                          }
-                        }
-                      }
-                    }
-                    """, className, embeddingArrayToString(queryEmbedding), userId, limit);
-                
-                Map<String, Object> requestBody = new HashMap<>();
-                requestBody.put("query", graphql);
-                
-                HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create(endpoint + "v1/graphql"))
-                        .header("Content-Type", "application/json")
-                        .header("Authorization", "Bearer " + apiKey)
-                        .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)))
-                        .build();
-                
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-                
-                if (response.statusCode() != 200) {
-                    throw new RuntimeException("Weaviate search failed: " + response.body());
-                }
-                
-                // 解析GraphQL响应
-                Map<String, Object> responseBody = objectMapper.readValue(response.body(), Map.class);
-                Map<String, Object> data = (Map<String, Object>) responseBody.get("data");
-                Map<String, Object> get = (Map<String, Object>) data.get("Get");
-                List<Map<String, Object>> results = (List<Map<String, Object>>) get.get(className);
-                
-                return results.stream()
-                        .map(result -> {
-                            String id = (String) result.get("vectorId");
-                            Map<String, Object> additional = (Map<String, Object>) result.get("_additional");
-                            double certainty = ((Number) additional.get("certainty")).doubleValue();
-                            
-                            Map<String, Object> metadata = new HashMap<>();
-                            metadata.put("content", result.get("content"));
-                            
-                            return new SearchResult(id, certainty, metadata);
-                        })
-                        .collect(java.util.stream.Collectors.toList());
-                
-            } catch (Exception e) {
-                logger.error("Error searching Weaviate", e);
-                throw new RuntimeException("Weaviate search failed", e);
-            }
-        });
-    }
-    
-    @Override
-    public CompletableFuture<Void> deleteVector(String id, String userId) {
-        return CompletableFuture.runAsync(() -> {
-            try {
-                HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create(endpoint + "v1/objects/" + id))
-                        .header("Authorization", "Bearer " + apiKey)
-                        .DELETE()
-                        .build();
-                
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-                
-                if (response.statusCode() != 204) {
-                    throw new RuntimeException("Weaviate delete failed: " + response.body());
-                }
-                
-                logger.debug("Successfully deleted vector from Weaviate: {}", id);
-                
-            } catch (Exception e) {
-                logger.error("Error deleting vector from Weaviate", e);
-                throw new RuntimeException("Weaviate deletion failed", e);
-            }
-        });
-    }
-    
-    @Override
-    public CompletableFuture<Void> close() {
-        return CompletableFuture.completedFuture(null);
-    }
-    
-    @Override
-    public CompletableFuture<Void> updateVector(String id, List<Float> embedding, 
-                                               Map<String, Object> metadata, String userId) {
-        return insertVector(id, embedding, metadata, userId).thenApply(result -> null);
-    }
-    
-    @Override
-    public CompletableFuture<VectorEntry> getVector(String id, String userId) {
-        return CompletableFuture.completedFuture(null);
-    }
-    
-    @Override
-    public CompletableFuture<List<VectorEntry>> getAllVectors(String userId) {
-        return CompletableFuture.completedFuture(Collections.emptyList());
-    }
-    
-    @Override
-    public CompletableFuture<Long> getVectorCount(String userId) {
-        return CompletableFuture.completedFuture(0L);
-    }
-    
-    private String embeddingArrayToString(List<Float> embedding) {
-        return "[" + String.join(",", embedding.stream()
-                .map(Object::toString)
-                .collect(java.util.stream.Collectors.toList())) + "]";
-    }
-}
-
-/**
- * Qdrant向量存储实现 - Qdrant Vector Store Implementation
- */
-class QdrantVectorStore implements VectorStore {
-    private static final Logger logger = LoggerFactory.getLogger(QdrantVectorStore.class);
-    
-    private final String endpoint;
-    private final String apiKey;
-    // Note: For Java 8 compatibility, use OkHttp or Apache HttpClient
-    // private final OkHttpClient httpClient;
-    private final ObjectMapper objectMapper;
-    private final String collectionName = "mem0_vectors";
-    
-    public QdrantVectorStore(String endpoint, String apiKey) {
-        this.endpoint = endpoint.endsWith("/") ? endpoint : endpoint + "/";
-        this.apiKey = apiKey;
-        // this.httpClient = new OkHttpClient.Builder()
-        //         .connectTimeout(30, TimeUnit.SECONDS)
-        //         .build();
-        this.objectMapper = new ObjectMapper();
-    }
-    
-    @Override
-    public CompletableFuture<String> insertVector(String id, List<Float> embedding, 
-                                                 Map<String, Object> metadata, String userId) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                Map<String, Object> payload = new HashMap<>(metadata);
-                payload.put("userId", userId);
-                
-                // Create point map for Java 8 compatibility
-                Map<String, Object> point = new HashMap<>();
-                point.put("id", id);
-                point.put("vector", embedding);
-                point.put("payload", payload);
-                
-                Map<String, Object> requestBody = new HashMap<>();
-                requestBody.put("points", Arrays.asList(point));
-                
-                HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-                        .uri(URI.create(endpoint + "collections/" + collectionName + "/points"))
-                        .header("Content-Type", "application/json")
-                        .PUT(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)));
-                
-                if (apiKey != null && !apiKey.isEmpty()) {
-                    requestBuilder.header("api-key", apiKey);
-                }
-                
-                HttpRequest request = requestBuilder.build();
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-                
-                if (response.statusCode() != 200) {
-                    throw new RuntimeException("Qdrant insert failed: " + response.body());
-                }
-                
-                logger.debug("Successfully inserted vector into Qdrant: {}", id);
-                return id;
-                
-            } catch (Exception e) {
-                logger.error("Error inserting vector into Qdrant", e);
-                throw new RuntimeException("Qdrant insertion failed", e);
-            }
-        });
-    }
-    
-    @Override
-    public CompletableFuture<List<SearchResult>> searchVectors(List<Float> queryEmbedding, 
-                                                              String userId, int limit) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                // Create filter structure for Java 8 compatibility
-                Map<String, Object> matchValue = new HashMap<>();
-                matchValue.put("value", userId);
-                
-                Map<String, Object> mustCondition = new HashMap<>();
-                mustCondition.put("key", "userId");
-                mustCondition.put("match", matchValue);
-                
-                Map<String, Object> filter = new HashMap<>();
-                filter.put("must", Arrays.asList(mustCondition));
-                
-                Map<String, Object> requestBody = new HashMap<>();
-                requestBody.put("vector", queryEmbedding);
-                requestBody.put("limit", limit);
-                requestBody.put("with_payload", true);
-                requestBody.put("filter", filter);
-                
-                HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-                        .uri(URI.create(endpoint + "collections/" + collectionName + "/points/search"))
-                        .header("Content-Type", "application/json")
-                        .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)));
-                
-                if (apiKey != null && !apiKey.isEmpty()) {
-                    requestBuilder.header("api-key", apiKey);
-                }
-                
-                HttpRequest request = requestBuilder.build();
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-                
-                if (response.statusCode() != 200) {
-                    throw new RuntimeException("Qdrant search failed: " + response.body());
-                }
-                
-                Map<String, Object> responseBody = objectMapper.readValue(response.body(), Map.class);
-                List<Map<String, Object>> results = (List<Map<String, Object>>) responseBody.get("result");
-                
-                return results.stream()
-                        .map(result -> {
-                            String id = result.get("id").toString();
-                            double score = ((Number) result.get("score")).doubleValue();
-                            Map<String, Object> payload = (Map<String, Object>) result.get("payload");
-                            
-                            return new SearchResult(id, score, payload);
-                        })
-                        .collect(java.util.stream.Collectors.toList());
-                
-            } catch (Exception e) {
-                logger.error("Error searching Qdrant", e);
-                throw new RuntimeException("Qdrant search failed", e);
-            }
-        });
-    }
-    
-    @Override
-    public CompletableFuture<Void> deleteVector(String id, String userId) {
-        return CompletableFuture.runAsync(() -> {
-            try {
-                Map<String, Object> requestBody = new HashMap<>();
-                requestBody.put("points", Arrays.asList(id));
-                
-                HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-                        .uri(URI.create(endpoint + "collections/" + collectionName + "/points/delete"))
-                        .header("Content-Type", "application/json")
-                        .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)));
-                
-                if (apiKey != null && !apiKey.isEmpty()) {
-                    requestBuilder.header("api-key", apiKey);
-                }
-                
-                HttpRequest request = requestBuilder.build();
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-                
-                if (response.statusCode() != 200) {
-                    throw new RuntimeException("Qdrant delete failed: " + response.body());
-                }
-                
-                logger.debug("Successfully deleted vector from Qdrant: {}", id);
-                
-            } catch (Exception e) {
-                logger.error("Error deleting vector from Qdrant", e);
-                throw new RuntimeException("Qdrant deletion failed", e);
-            }
-        });
-    }
-    
-    @Override
-    public CompletableFuture<Void> close() {
-        return CompletableFuture.completedFuture(null);
-    }
-    
-    @Override
-    public CompletableFuture<Void> updateVector(String id, List<Float> embedding, 
-                                               Map<String, Object> metadata, String userId) {
-        return insertVector(id, embedding, metadata, userId).thenApply(result -> null);
-    }
-    
-    @Override
-    public CompletableFuture<VectorEntry> getVector(String id, String userId) {
-        return CompletableFuture.completedFuture(null);
-    }
-    
-    @Override
-    public CompletableFuture<List<VectorEntry>> getAllVectors(String userId) {
-        return CompletableFuture.completedFuture(Collections.emptyList());
-    }
-    
-    @Override
-    public CompletableFuture<Long> getVectorCount(String userId) {
-        return CompletableFuture.completedFuture(0L);
-    }
-}
-
-/**
  * 自定义向量存储实现 - Custom Vector Store Implementation
+ * This demonstrates how to implement a custom vector store for mem0-java
  */
 class CustomVectorStore implements VectorStore {
     private static final Logger logger = LoggerFactory.getLogger(CustomVectorStore.class);
@@ -684,83 +82,70 @@ class CustomVectorStore implements VectorStore {
     private final Map<String, VectorEntry> vectors = new ConcurrentHashMap<>();
     
     @Override
-    public CompletableFuture<String> insertVector(String id, List<Float> embedding, 
-                                                 Map<String, Object> metadata, String userId) {
+    public CompletableFuture<String> insert(String collectionName, List<Float> embedding, 
+                                           Map<String, Object> metadata) {
         return CompletableFuture.supplyAsync(() -> {
-            VectorEntry entry = new VectorEntry(id, embedding, metadata, userId);
-            vectors.put(userId + ":" + id, entry);
+            String id = UUID.randomUUID().toString();
+            VectorEntry entry = new VectorEntry(id, embedding, metadata);
+            vectors.put(collectionName + ":" + id, entry);
+            
             logger.debug("Inserted vector into custom store: {}", id);
             return id;
         });
     }
     
     @Override
-    public CompletableFuture<List<SearchResult>> searchVectors(List<Float> queryEmbedding, 
-                                                              String userId, int limit) {
+    public CompletableFuture<List<VectorEntry>> search(String collectionName, List<Float> queryEmbedding, 
+                                                       Map<String, Object> filter, int limit) {
         return CompletableFuture.supplyAsync(() -> {
-            List<SearchResult> results = new ArrayList<>();
+            List<VectorEntry> results = new ArrayList<>();
             
             vectors.entrySet().stream()
-                    .filter(entry -> entry.getKey().startsWith(userId + ":"))
+                    .filter(entry -> entry.getKey().startsWith(collectionName + ":"))
                     .forEach(entry -> {
                         VectorEntry vectorEntry = entry.getValue();
+                        // 简单的余弦相似度计算
                         double similarity = calculateCosineSimilarity(queryEmbedding, vectorEntry.getEmbedding());
                         
-                        SearchResult result = new SearchResult(
-                            vectorEntry.getId(),
-                            similarity,
-                            vectorEntry.getMetadata()
-                        );
-                        results.add(result);
+                        // 创建搜索结果
+                        results.add(vectorEntry);
                     });
             
             return results.stream()
-                    .sorted((a, b) -> Double.compare(b.getScore(), a.getScore()))
                     .limit(limit)
                     .collect(java.util.stream.Collectors.toList());
         });
     }
     
     @Override
-    public CompletableFuture<Void> deleteVector(String id, String userId) {
+    public CompletableFuture<Void> delete(String collectionName, String id) {
         return CompletableFuture.runAsync(() -> {
-            vectors.remove(userId + ":" + id);
+            vectors.remove(collectionName + ":" + id);
             logger.debug("Deleted vector from custom store: {}", id);
         });
     }
     
     @Override
-    public CompletableFuture<Void> updateVector(String id, List<Float> embedding, 
-                                               Map<String, Object> metadata, String userId) {
-        return CompletableFuture.runAsync(() -> {
-            VectorEntry entry = new VectorEntry(id, embedding, metadata, userId);
-            vectors.put(userId + ":" + id, entry);
-            logger.debug("Updated vector in custom store: {}", id);
+    public CompletableFuture<Boolean> collectionExists(String collectionName) {
+        return CompletableFuture.supplyAsync(() -> {
+            return vectors.keySet().stream()
+                    .anyMatch(key -> key.startsWith(collectionName + ":"));
         });
     }
     
     @Override
-    public CompletableFuture<VectorEntry> getVector(String id, String userId) {
-        return CompletableFuture.supplyAsync(() -> vectors.get(userId + ":" + id));
+    public CompletableFuture<Void> createCollection(String collectionName, int dimension) {
+        return CompletableFuture.runAsync(() -> {
+            logger.debug("Created collection: {} (dimension: {})", collectionName, dimension);
+        });
     }
     
     @Override
-    public CompletableFuture<List<VectorEntry>> getAllVectors(String userId) {
-        return CompletableFuture.supplyAsync(() -> 
-            vectors.entrySet().stream()
-                    .filter(entry -> entry.getKey().startsWith(userId + ":"))
-                    .map(Map.Entry::getValue)
-                    .collect(java.util.stream.Collectors.toList())
-        );
-    }
-    
-    @Override
-    public CompletableFuture<Long> getVectorCount(String userId) {
-        return CompletableFuture.supplyAsync(() -> 
-            vectors.entrySet().stream()
-                    .filter(entry -> entry.getKey().startsWith(userId + ":"))
-                    .count()
-        );
+    public CompletableFuture<Void> dropCollection(String collectionName) {
+        return CompletableFuture.runAsync(() -> {
+            vectors.entrySet().removeIf(entry -> entry.getKey().startsWith(collectionName + ":"));
+            logger.debug("Dropped collection: {}", collectionName);
+        });
     }
     
     @Override

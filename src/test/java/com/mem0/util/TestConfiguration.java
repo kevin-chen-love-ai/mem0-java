@@ -238,12 +238,22 @@ public class TestConfiguration {
             synchronized (this) {
                 if (llmProvider == null) {
                     try {
-                        String apiKey = getConfigValue("llm.apikey", DEFAULT_LLM_API_KEY);
-                        llmProvider = new QwenLLMProvider(apiKey);
+                        // Use mock provider by default for tests to avoid external API calls
+                        if (isRealProviderEnabled()) {
+                            String apiKey = getConfigValue("llm.apikey", DEFAULT_LLM_API_KEY);
+                            llmProvider = new QwenLLMProvider(apiKey);
+                        } else {
+                            // Use RuleBasedLLMProvider as mock for testing
+                            llmProvider = new RuleBasedLLMProvider();
+                        }
                     } catch (Exception e) {
                         System.err.println("Warning: Could not initialize LLM provider: " + e.getMessage());
-                        // 对于无法初始化真实Provider的情况，返回null让测试自行处理
-                        return null;
+                        // Fallback to RuleBasedLLMProvider
+                        try {
+                            llmProvider = new RuleBasedLLMProvider();
+                        } catch (Exception ex) {
+                            return null;
+                        }
                     }
                 }
             }
@@ -256,11 +266,22 @@ public class TestConfiguration {
             synchronized (this) {
                 if (embeddingProvider == null) {
                     try {
-                        String apiKey = getConfigValue("embedding.apikey", DEFAULT_EMBEDDING_API_KEY);
-                        embeddingProvider = new AliyunEmbeddingProvider(apiKey);
+                        // Use mock provider by default for tests to avoid external API calls
+                        if (isRealProviderEnabled()) {
+                            String apiKey = getConfigValue("embedding.apikey", DEFAULT_EMBEDDING_API_KEY);
+                            embeddingProvider = new AliyunEmbeddingProvider(apiKey);
+                        } else {
+                            // Use SimpleTFIDFEmbeddingProvider as mock for testing
+                            embeddingProvider = new SimpleTFIDFEmbeddingProvider();
+                        }
                     } catch (Exception e) {
                         System.err.println("Warning: Could not initialize Embedding provider: " + e.getMessage());
-                        return null;
+                        // Fallback to SimpleTFIDFEmbeddingProvider
+                        try {
+                            embeddingProvider = new SimpleTFIDFEmbeddingProvider();
+                        } catch (Exception ex) {
+                            return null;
+                        }
                     }
                 }
             }

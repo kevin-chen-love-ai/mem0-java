@@ -100,7 +100,8 @@
       "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_361.jdk/Contents/Home mvn test -Dtest=\"!*Performance*,!*Benchmark*,!*Load*\" -DfailIfNoTests=false)",
       "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_361.jdk/Contents/Home mvn test -Dtest=\"*InMemoryVectorStoreTest,*FastMemoryTest,*Mem0Test,*CoreTest\" -q)",
       "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_361.jdk/Contents/Home mvn test -Dtest=\"*InMemoryVectorStoreTest\")",
-      "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_361.jdk/Contents/Home mvn test -Dtest=\"*FastMemoryTest\")"
+      "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_361.jdk/Contents/Home mvn test -Dtest=\"*FastMemoryTest\")",
+      "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_361.jdk/Contents/Home mvn test -Dtest=\"*OpenAIEmbeddingProviderTest\" -q)"
     ],
     "deny": [],
     "ask": [],

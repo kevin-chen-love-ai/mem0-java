@@ -1,12 +1,14 @@
-package examples.basic;
+package com.mem0.examples.basic;
 
 import com.mem0.Mem0;
-import com.mem0.config.Mem0Configuration;
-import com.mem0.core.Memory;
+import com.mem0.config.Mem0Config;
+import com.mem0.core.EnhancedMemory;
 import com.mem0.embedding.EmbeddingProvider;
 import com.mem0.embedding.impl.MockEmbeddingProvider;
 import com.mem0.llm.LLMProvider;
 import com.mem0.llm.MockLLMProvider;
+import com.mem0.vector.impl.InMemoryVectorStore;
+import com.mem0.graph.impl.DefaultInMemoryGraphStore;
 
 import java.util.Arrays;
 import java.util.List;
@@ -23,11 +25,8 @@ public class BasicUsageExample {
     public static void main(String[] args) throws Exception {
         System.out.println("=== Mem0 Java Basic Usage Example ===\n");
         
-        // 1. 创建配置
-        Mem0Configuration config = createBasicConfiguration();
-        
-        // 2. 初始化Mem0实例
-        Mem0 mem0 = new Mem0(config);
+        // 1. 初始化Mem0实例
+        Mem0 mem0 = createMem0Instance();
         
         // 3. 基本操作示例
         runBasicOperations(mem0);
@@ -44,21 +43,19 @@ public class BasicUsageExample {
         System.out.println("\n=== Example completed successfully! ===");
     }
     
-    private static Mem0Configuration createBasicConfiguration() {
-        System.out.println("1. Creating basic configuration...");
+    private static Mem0 createMem0Instance() {
+        System.out.println("1. Creating Mem0 instance...");
         
-        Mem0Configuration config = new Mem0Configuration();
+        // 使用Builder模式创建实例
+        Mem0 mem0 = Mem0.builder()
+                .vectorStore(new InMemoryVectorStore())
+                .graphStore(new DefaultInMemoryGraphStore()) 
+                .embeddingProvider(new MockEmbeddingProvider())
+                .llmProvider(new MockLLMProvider())
+                .build();
         
-        // 使用Mock提供者进行演示
-        config.setLlmProvider(new MockLLMProvider());
-        config.setEmbeddingProvider(new MockEmbeddingProvider());
-        
-        // 基础配置
-        config.setUserId("demo-user");
-        config.setApplicationName("BasicExample");
-        
-        System.out.println("   ✓ Configuration created\n");
-        return config;
+        System.out.println("   ✓ Mem0 instance created\n");
+        return mem0;
     }
     
     private static void runBasicOperations(Mem0 mem0) throws Exception {
@@ -66,23 +63,24 @@ public class BasicUsageExample {
         
         // 添加记忆
         System.out.println("   Adding memories:");
+        String userId = "demo-user";
         
-        String memory1 = mem0.add("I love drinking coffee in the morning");
+        String memory1 = mem0.add("I love drinking coffee in the morning", userId).get();
         System.out.println("   ✓ Added memory 1: " + memory1);
         
-        String memory2 = mem0.add("My favorite programming language is Java");
+        String memory2 = mem0.add("My favorite programming language is Java", userId).get();
         System.out.println("   ✓ Added memory 2: " + memory2);
         
-        String memory3 = mem0.add("I work as a software engineer at TechCorp");
+        String memory3 = mem0.add("I work as a software engineer at TechCorp", userId).get();
         System.out.println("   ✓ Added memory 3: " + memory3);
         
         // 获取所有记忆
-        List<Memory> allMemories = mem0.getAll();
+        List<EnhancedMemory> allMemories = mem0.getAll(userId).get();
         System.out.println("   ✓ Total memories: " + allMemories.size());
         
         // 更新记忆
         System.out.println("\n   Updating memory:");
-        mem0.update(memory1, "I prefer tea over coffee in the afternoon");
+        mem0.update(memory1, "I prefer tea over coffee in the afternoon").get();
         System.out.println("   ✓ Updated memory 1");
         
         System.out.println("   ✓ Basic operations completed\n");
@@ -90,20 +88,25 @@ public class BasicUsageExample {
     
     private static void runBatchOperations(Mem0 mem0) throws Exception {
         System.out.println("3. Running batch operations...");
+        String userId = "demo-user";
         
-        // 批量添加记忆
+        // 批量添加记忆 (一个一个添加，因为没有批量接口)
         List<String> batchTexts = Arrays.asList(
             "I enjoy reading technical books",
-            "My office is located in downtown",
+            "My office is located in downtown", 
             "I have 5 years of experience in backend development",
             "I graduated from Computer Science program"
         );
         
-        List<String> batchIds = mem0.addBatch(batchTexts);
-        System.out.println("   ✓ Added " + batchIds.size() + " memories in batch");
+        int addedCount = 0;
+        for (String text : batchTexts) {
+            mem0.add(text, userId).get();
+            addedCount++;
+        }
+        System.out.println("   ✓ Added " + addedCount + " memories");
         
         // 获取用户的所有记忆
-        List<Memory> userMemories = mem0.getAll("demo-user");
+        List<EnhancedMemory> userMemories = mem0.getAll(userId).get();
         System.out.println("   ✓ User now has " + userMemories.size() + " memories");
         
         System.out.println("   ✓ Batch operations completed\n");
@@ -111,22 +114,24 @@ public class BasicUsageExample {
     
     private static void runSearchOperations(Mem0 mem0) throws Exception {
         System.out.println("4. Running search operations...");
+        String userId = "demo-user";
         
         // 搜索相关记忆
         String query = "What do you know about my work?";
-        List<Memory> workRelated = mem0.search(query, "demo-user");
+        List<EnhancedMemory> workRelated = mem0.search(query, userId, 5).get();
         
         System.out.println("   Search query: \"" + query + "\"");
         System.out.println("   ✓ Found " + workRelated.size() + " related memories:");
         
-        for (Memory memory : workRelated) {
+        for (EnhancedMemory memory : workRelated) {
             System.out.println("     - " + memory.getContent());
         }
         
-        // 获取记忆历史
-        String memoryId = workRelated.get(0).getId();
-        List<Memory> history = mem0.getHistory(memoryId);
-        System.out.println("   ✓ Memory history entries: " + history.size());
+        // 获取统计信息
+        if (!workRelated.isEmpty()) {
+            Mem0.MemoryStatistics stats = mem0.getStatistics(userId).get();
+            System.out.println("   ✓ Memory statistics: " + stats.toString());
+        }
         
         System.out.println("   ✓ Search operations completed\n");
     }
